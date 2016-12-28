@@ -1,0 +1,37 @@
+BLAS_CXXFLAGS_USE =
+USE_OPEN_BLAS =
+
+ifneq ($(wildcard c:/OpenBLAS),)
+BLAS_CXXFLAGS_USE = -I"c:/OpenBLAS/include" -lopenblas
+USE_OPEN_BLAS = -D USE_OPEN_BLAS
+BLAS_LIBS_USE = C:/OpenBLAS/lib/libopenblas.a
+else
+BLAS_LIBS_USE = $(BLAS_LIBS)
+endif
+
+SOURCES_C = stats/lm.c
+SOURCES_CPP = Cdqrls_wrapper.cpp RcppExports.cpp bigglm_wrapper.cpp ddhazard_fit.cpp dist_families.cpp loglike.cpp risk_obj.cpp thread_pool.cpp
+SOURCES_F = biglm/boundedQRf.f
+CXX_STD = CXX11
+OBJECTS =$(SOURCES_CPP:.cpp=.o)  $(SOURCES_C:.c=.o) $(SOURCES_F:.f=.o)
+
+## PKG_CFLAGS & PKG_CXXFLAGS C and C++ flags
+PKG_CXXFLAGS = $(SHLIB_OPENMP_CXXFLAGS) $(BLAS_CXXFLAGS_USE) $(USE_OPEN_BLAS) $(SHLIB_PTHREAD_FLAGS)
+## PKG_LIBS: Linker flags
+PKG_LIBS = $(FLIBS) $(BLAS_LIBS_USE) $(LAPACK_LIBS) $(SHLIB_PTHREAD_FLAGS) $(USE_OPEN_BLAS)
+
+ifeq "$(WIN)" "64"
+PKG_LIBS = $(FLIBS) $(BLAS_LIBS_USE) $(LAPACK_LIBS) $(SHLIB_PTHREAD_FLAGS) $(USE_OPEN_BLAS) -D ARMA_64BIT_WORD
+else
+PKG_LIBS = $(FLIBS) $(BLAS_LIBS_USE) $(LAPACK_LIBS) $(SHLIB_PTHREAD_FLAGS) $(USE_OPEN_BLAS)
+endif
+
+all: $(SHLIB)
+
+$(SOURCES_CPP:.cpp=.o): dynamichazard.h
+
+ddhazard_fit.o: ddhazard_fit.cpp thread_pool.h
+
+thread_pool.o: thread_pool.cpp thread_pool.h
+
+bigglm_wrapper.o Cdqrls_wrapper.o: dist_families.cpp
