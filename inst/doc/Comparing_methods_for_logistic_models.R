@@ -35,6 +35,9 @@ current_version # The string you need to pass devtools::install_github
 ## ----eval=FALSE---------------------------------------------------------------
 #  devtools::install_github(current_version)
 
+## ----eval=FALSE---------------------------------------------------------------
+#  install.packages("dynamichazard")
+
 ## -----------------------------------------------------------------------------
 # PBC data set from survival with time variying covariates
 # Details of tmerge are not important in this scope. The code is included
@@ -62,7 +65,7 @@ glm_simple$coefficients
 
 ## -----------------------------------------------------------------------------
 library(dynamichazard)
-pbc2_big_frame <- get_survival_case_weigths_and_data(
+pbc2_big_frame <- get_survival_case_weights_and_data(
   Surv(tstart, tstop, death == 2) ~ age + edema + log(albumin) + log(protime) +
     log(bili), data = pbc2, id = pbc2$id, by = 100, max_T = 3600, 
   use_weights = F)
@@ -72,7 +75,7 @@ pbc2_big_frame <- pbc2_big_frame$X
 pbc2_big_frame[pbc2_big_frame$id == 282, ]
 
 ## -----------------------------------------------------------------------------
-pbc2_small_frame <- get_survival_case_weigths_and_data(
+pbc2_small_frame <- get_survival_case_weights_and_data(
   Surv(tstart, tstop, death == 2) ~ age + edema + log(albumin) + log(protime) +
     log(bili), data = pbc2, id = pbc2$id, by = 100, max_T = 3600, 
   use_weights = T)

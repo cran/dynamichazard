@@ -35,8 +35,7 @@ join_threads::~join_threads()
 {
   for(unsigned long i=0;i<threads.size();++i)
   {
-    if(threads[i].joinable())
-      threads[i].join();
+    threads[i].join();
   }
 }
 
@@ -78,7 +77,3 @@ bool work_stealing_queue::try_steal(data_type& res)
   the_queue.pop_back();
   return true;
 }
-
-// Listing 9.8
-thread_local work_stealing_queue* local_work_queue;
-thread_local unsigned my_index;

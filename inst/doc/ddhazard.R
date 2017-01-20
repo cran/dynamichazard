@@ -25,6 +25,9 @@ current_version # the string you need to pass to devtools::install_github
 ## ----eval=FALSE----------------------------------------------------------
 #  devtools::install_github(current_version)
 
+## ----eval=FALSE----------------------------------------------------------
+#  install.packages("dynamichazard")
+
 ## ---- echo=FALSE---------------------------------------------------------
 source("../R/test_utils.R")
 
@@ -55,10 +58,10 @@ knitr::kable(head(simple_ex, 10), digits = 4)
 ## ------------------------------------------------------------------------
 library(dynamichazard)
 library(survival)
-dd_fit_short_bins <- ddhazard(
-  Surv(tstart, tstop, event) ~ x1 + x2, # Formula like for cox.ph from survival
+dd_fit_short <- ddhazard(
+  Surv(tstart, tstop, event) ~ x1 + x2, # Formula like for coxph from survival
        data = simple_ex,
-       by = 1,                          # Length of bin intervals
+       by = 1,                          # Length of time intervals
        Q = diag(0.1, 3),                # Covariance matrix in state eqn 
        Q_0 = diag(10, 3),               # Covariance matrix for initial state
                                         # vector
@@ -69,12 +72,12 @@ dd_fit_short_bins <- ddhazard(
   )                      
 
 # Print diagonal of covariance matrix
-diag(dd_fit_short_bins$Q) 
+diag(dd_fit_short$Q) 
 
 ## ------------------------------------------------------------------------
 library(dynamichazard)
 library(survival)
-dd_fit_wide_bins <- ddhazard(
+dd_fit_wide <- ddhazard(
   Surv(tstart, tstop, event) ~ x1 + x2, 
        data = simple_ex,
        by = 2,                          # increased
@@ -86,21 +89,21 @@ dd_fit_wide_bins <- ddhazard(
         list(ridge_eps = 0.0002))       # increased               
 
 # Print relative differences between diagonal of covariance matrices
-Q_short <- dd_fit_short_bins$Q
-Q_wide <- dd_fit_wide_bins$Q
-diag((Q_wide - Q_short) / abs(Q_short))   
+Q_short <- dd_fit_short$Q
+Q_wide <- dd_fit_wide$Q
+diag((Q_wide - Q_short) / Q_short)   
 
 ## ---- eval=FALSE---------------------------------------------------------
 #  dynamichazard::ddhazard_app()
 
-## ----binning_fig, echo=FALSE, results="hide", fig.cap = "Illustration of binning. Each horizontal line represents an individual. A cross indicates that new covariates are observed while a filled circle indicates that the individual have died. Open circles indicates that the individual is right censored. Vertical dashed lines are bin borders", fig.height=3----
+## ----binning_fig, echo=FALSE, results="hide", fig.cap = "Illustration of of going from event time to binary varibles. Each horizontal line represents an individual. A cross indicates that new covariates are observed while a filled circle indicates that the individual have died. Open circles indicates that the individual is right censored. Vertical dashed lines are time interval borders", fig.height=3----
 par(cex = .8, mar = c(1, 4, 1, 2))
 plot(c(0, 4), c(0, 1), type="n", xlab="", ylab="", axes = F)
 
 abline(v = c(0.5, 1.5, 2.5), lty = 2)
 
-text(1, 0.01, "1st bin", adj = .5)
-text(2, 0.01, "2nd bin", adj = .5)
+text(1, 0.01, "1st interval", adj = .5)
+text(2, 0.01, "2nd interval", adj = .5)
 
 n_series = 7
 y_pos = seq(0, 1, length.out = n_series + 2)[-c(1, n_series +2)]
@@ -178,7 +181,7 @@ head(data_frame)
 ## ---- eval=FALSE---------------------------------------------------------
 #  # The fit
 #  fit <- ddhazard(Surv(tstart, tstop, y) ~ x1 + ddFixed(x2), data_frame,
-#                  by = 1, # bin lengths are 1
+#                  by = 1, # time interval lengths are 1
 #                  id = data_frame$id, model = "exponential")
 
 ## ---- echo=FALSE---------------------------------------------------------

@@ -1,5 +1,10 @@
 if(interactive()){
-  library(testthat); library(survival); library(parallel); source("R/test_utils.R")
+  library(testthat); library(survival); library(parallel)
+
+  if(grepl("testthat$", getwd()))
+    source("../../R/test_utils.R") else
+      source("./R/test_utils.R")
+
   library(dynamichazard)
   exp_model_names <- with(environment(ddhazard), exp_model_names)
 }
@@ -14,7 +19,7 @@ test_that("verbose prints log likelihood",{
     for(o in c(1, 2)){
       Q_0_arg <- if(o == 1) diag(1, 2) else diag(c(1, 1, .1, .1))
       for(m in c(exp_model_names, "logit")){
-        if(m == "exp_trunc_time" && method == "UKF")
+        if(m == "exp_clip_time" && method == "UKF")
           next
         expect_output({
           ddhazard(survival::Surv(start, stop, event) ~ group,
@@ -109,7 +114,8 @@ test_that("logLik for head_neck_cancer data set match previous results with fixe
     formula = survival::Surv(start, stop, event) ~ ddFixed(group),
     data = head_neck_cancer,
     by = 1,
-    control = list(n_max = 10^4, eps = 10^-4, est_Q_0 = F),
+    control = list(n_max = 10^4, eps = 10^-4, est_Q_0 = F,
+                   fixed_terms_method = "M_step"),
     a_0 = 0, Q_0 = as.matrix(1), Q = as.matrix(1e-3),
     max_T = 45,
     id = head_neck_cancer$id, order = 1))
@@ -134,9 +140,10 @@ test_that("logLik for head_neck_cancer data with only fixed match bigglm", {
     data = head_neck_cancer,
     by = 1,
     max_T = 45,
-    id = head_neck_cancer$id, order = 1))
+    id = head_neck_cancer$id, order = 1,
+    control = list(fixed_terms_method = "M_step")))
 
-  tmp_design <- get_survival_case_weigths_and_data(
+  tmp_design <- get_survival_case_weights_and_data(
     formula = form, data = head_neck_cancer, by = 1, max_T = 45, id = head_neck_cancer$id,
     use_weights = F)
 
@@ -218,7 +225,8 @@ test_that("logLik for simulated data versus old results", {
     survival::Surv(tstart, tstop, event) ~ ddFixed(x1) + ddFixed(x2) + x3 + x4 + x5,
     sims$res,
     by = 1,
-    control = list(n_max = 10^4, eps = 10^-2, est_Q_0 = F),
+    control = list(n_max = 10^4, eps = 10^-2, est_Q_0 = F,
+                   fixed_terms_method = "M_step"),
     a_0 = rep(0, 4), Q_0 = diag(1, 4),
     max_T = 10,
     id = sims$res$id, order = 1,
@@ -243,7 +251,7 @@ test_that("logLik for simulated data versus old results", {
     sims$res,
     by = 1,
     control = list(n_max = 10^4, eps = 10^-2, est_Q_0 = F,
-                   ridge_eps = 1e-1),
+                   ridge_eps = 1e-1, fixed_terms_method = "M_step"),
     a_0 = rep(0, 4), Q_0 = diag(1, 4),
     Q = diag(1e-2, 4),
     max_T = 10, model = "exp_combined",

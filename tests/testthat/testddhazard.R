@@ -1,6 +1,9 @@
 if(interactive()){
   library(survival); library(dynamichazard); library(testthat)
-  source("./R/test_utils.R")
+
+  if(grepl("testthat$", getwd()))
+    source("../../R/test_utils.R") else
+      source("./R/test_utils.R")
 }
 
 # Had issues with win builder. Thus, these lines
@@ -432,7 +435,7 @@ test_that("Unmacthed control variable throw error",
             )}, regexp = "These control parameters are not recognized"))
 
 
-test_that("Result of exponential model with only binary or right truncated time yield previous results", {
+test_that("Result of exponential model with only binary or right clipped time yield previous results", {
   suppressMessages(result_exp <- ddhazard(
     formula = survival::Surv(tstart, tstop, event) ~ . - id - tstart - tstop - event,
     data = sims$res,
@@ -516,7 +519,7 @@ test_that("Result of exponential model with only binary or right truncated time 
     max_T = 10,
     id = sims$res$id, order = 1,
     verbose = F,
-    model = "exp_trunc_time"))
+    model = "exp_clip_time"))
   # sink()
   # close(tmp)
 
@@ -585,7 +588,7 @@ test_that("Result of exponential model with only binary or right truncated time 
                , tolerance = 1e-04)
 
   expect_equal(unname(c(result_exp$model)),
-               c("exp_trunc_time" )
+               c("exp_clip_time" )
                , tolerance = 1e-04)
 
   expect_equal(unname(c(result_exp$est_Q_0)),
@@ -609,7 +612,7 @@ test_that("Result of exponential model with only binary or right truncated time 
     max_T = 10,
     id = sims$res$id, order = 1,
     verbose = F,
-    model = "exp_trunc_time_w_jump"))
+    model = "exp_clip_time_w_jump"))
   # sink()
   # close(tmp)
 
@@ -678,7 +681,7 @@ test_that("Result of exponential model with only binary or right truncated time 
                , tolerance = 1e-04)
 
   expect_equal(unname(c(result_exp$model)),
-               c("exp_trunc_time_w_jump" )
+               c("exp_clip_time_w_jump" )
                , tolerance = 1e-04)
 
   expect_equal(unname(c(result_exp$est_Q_0)),

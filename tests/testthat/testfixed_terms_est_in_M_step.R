@@ -2,7 +2,10 @@ library(biglm)
 
 if(interactive()){
   library(survival); library(dynamichazard); library(testthat)
-  source("C:/Users/boennecd/Dropbox/skole_backup/phd/dynamichazard/R/test_utils.R")
+
+  if(grepl("testthat$", getwd()))
+    source("../../R/test_utils.R") else
+      source("./R/test_utils.R")
 }
 
 # Had issues with win builder. Thus, these lines
@@ -22,9 +25,10 @@ test_that("Only fixed effects yields same results as bigglm with logit model", {
 
   suppressWarnings(
     res1 <- ddhazard(form, data = sims$res, model = "logit", by = 1, id = sims$res$id, max_T = 10,
-                     control = list(eps_fixed_parems = 1e-3, fixed_effect_chunk_size = 1e3, max_it_fixed_params = 10)))
+                     control = list(eps_fixed_parems = 1e-3, fixed_effect_chunk_size = 1e3, max_it_fixed_params = 10,
+                                    fixed_terms_method = "M_step")))
 
-  tmp_design <- get_survival_case_weigths_and_data(form, data = sims$res, by = 1, id = sims$res$id,
+  tmp_design <- get_survival_case_weights_and_data(form, data = sims$res, by = 1, id = sims$res$id,
                                                    use_weights = F, max_T = 10)
 
   suppressWarnings(res2 <- bigglm(update(form, Y ~ .), data = tmp_design$X, family = binomial(), chunksize = 1e3))
@@ -39,7 +43,8 @@ test_that("Get previous results with logit model with some fixed terms", {
 
   suppressMessages(
     res1 <- ddhazard(form, data = sims$res, model = "logit", by = 1, id = sims$res$id, max_T = 10,
-                     control = list(save_risk_set = F, save_data = F)))
+                     control = list(save_risk_set = F, save_data = F,
+                                    fixed_terms_method = "M_step")))
 
   # matplot(sims$betas, type = "l", ylim = range(sims$betas, res1$state_vecs))
   # matplot(res1$state_vecs, add = T, col = 2:4, type = "l", lty = 1)
@@ -116,9 +121,10 @@ test_that("Only fixed effects yields same results as bigglm with exponential mod
                     -1 + ddFixed(rep(1, length(x1))) + ddFixed(x1) + ddFixed(x2) + ddFixed(x3))
 
   suppressWarnings(res1 <- ddhazard(form, data = sims$res, model = "exp_combined", by = 1, id = sims$res$id, max_T = 10,
-                                    control = list(eps_fixed_parems = 1e-4, fixed_effect_chunk_size = 1e3)))
+                                    control = list(eps_fixed_parems = 1e-4, fixed_effect_chunk_size = 1e3,
+                                                   fixed_terms_method = "M_step")))
 
-  tmp_design <- get_survival_case_weigths_and_data(form, data = sims$res, by = 1, id = sims$res$id,
+  tmp_design <- get_survival_case_weights_and_data(form, data = sims$res, by = 1, id = sims$res$id,
                                                    use_weights = F, max_T = 10, is_for_discrete_model = F)
 
   suppressWarnings(res2 <- bigglm(update(form, Y ~ . + offset(log(pmin(tstop, t) - pmax(tstart, t - 1)))),
@@ -129,13 +135,13 @@ test_that("Only fixed effects yields same results as bigglm with exponential mod
                , tolerance = 1e-05)
 })
 
-
 test_that("Changing fixed effect control parems changes the result", {
   arg_list <- list(
     formula(survival::Surv(tstart, tstop, event) ~
               -1 + ddFixed(rep(1, length(x1))) + ddFixed(x1) + ddFixed(x2) + ddFixed(x3)),
     data = sims$res, model = "exp_combined", by = 1, id = sims$res$id, max_T = 10,
-    control = list(eps_fixed_parems = 1e-12, fixed_effect_chunk_size = 1e3))
+    control = list(eps_fixed_parems = 1e-12, fixed_effect_chunk_size = 1e3,
+                   fixed_terms_method = "M_step"))
 
   suppressWarnings(res1 <- do.call(ddhazard, arg_list))
 
@@ -166,7 +172,8 @@ test_that("Get previous results with exponential model with some fixed terms", {
     res1 <- ddhazard(form, data = sims$res, model = "exp_combined", by = 1, id = sims$res$id, max_T = 10,
                     control = list(eps_fixed_parems = 1e-12, fixed_effect_chunk_size = 1e3,
                                    save_risk_set = F, save_data = F, n_max = 1e2,
-                                   ridge_eps = .005),
+                                   ridge_eps = .005,
+                                   fixed_terms_method = "M_step"),
                     Q_0 = diag(rep(10, 3)), Q = diag(.1, 3)))
 
   # matplot(sims$betas, type = "l", ylim = range(sims$betas, res1$state_vecs))
@@ -253,7 +260,8 @@ test_that("UKF with fixed effects works", {
                             -1 + ddFixed(rep(1, length(x1))) + ddFixed(x1) + x2 + x3),
                   data = sims$res, model = "logit", by = 1, id = sims$res$id, max_T = 10,
                   control = list(method = "UKF", fixed_parems_start = rep(0, 2),
-                                 save_data = F, save_risk_set = F))
+                                 save_data = F, save_risk_set = F,
+                                 fixed_terms_method = "M_step"))
 
 
   # matplot(sims$betas, type = "l", lty = 1)
@@ -317,13 +325,42 @@ test_that("UKF with fixed effects works", {
     fit <- ddhazard(formula(survival::Surv(tstart, tstop, event) ~
                               -1 + ddFixed(rep(1, length(x1))) + ddFixed(x1) + x2 + x3),
                     data = sims$res, model = "exp_combined", by = 1, id = sims$res$id, max_T = 10,
-                    control = list(method = "UKF")))
+                    control = list(method = "UKF",
+                                   fixed_terms_method = "M_step")))
 
 
   # matplot(sims$betas, type = "l", ylim = range(fit$state_vecs, sims$betas))
   # matplot(fit$state_vecs, type = "l", col = 3:4, add = T, lty = 1)
   # abline(h = fit$fixed_effects, col = 1:2)
 })
+
+
+set.seed(2555647)
+ws <- runif(nrow(sims$res))
+ws <- ws * (nrow(sims$res) / sum(ws))
+sims$res <- cbind(sims$res, ws = ws)
+
+test_that("Only fixed effects yields same results as bigglm with exponential model with weights", {
+  form <- formula(survival::Surv(tstart, tstop, event) ~
+                    -1 + ddFixed(rep(1, length(x1))) + ddFixed(x1) + ddFixed(x2) + ddFixed(x3))
+
+  suppressWarnings(res1 <- ddhazard(form, data = sims$res, model = "exp_combined", by = 1, id = sims$res$id, max_T = 10,
+                                    control = list(eps_fixed_parems = 1e-4, fixed_effect_chunk_size = 1e3,
+                                                   fixed_terms_method = "M_step"),
+                                    weights = sims$res$ws))
+
+  tmp_design <- get_survival_case_weights_and_data(form, data = sims$res, by = 1, id = sims$res$id,
+                                                   use_weights = F, max_T = 10, is_for_discrete_model = F)
+
+  suppressWarnings(res2 <- bigglm(
+    update(form, Y ~ . + offset(log(pmin(tstop, t) - pmax(tstart, t - 1)))),
+           data = tmp_design$X, family = poisson(), chunksize = 1e3,
+           tolerance = 1e-4, weights = ~ ws))
+
+  expect_equal(unname(coef(res2)), unname(c(res1$fixed_effects))
+               , tolerance = 1e-05)
+})
+
 
 
 

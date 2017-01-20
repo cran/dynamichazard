@@ -2,7 +2,7 @@
 #' @description  Function to fit dynamic discrete hazard models using state space models
 #' @param formula \code{\link[survival]{coxph}} like formula with \code{\link[survival]{Surv}(tstart, tstop, event)} on the left hand site of \code{~}
 #' @param data Data frame or environment containing the outcome and co-variates
-#' @param model \code{"logit"}, \code{"exp_trunc_time_w_jump"}, \code{"exp_trunc_time"}, \code{"exp_bin"} or \code{"exp_combined"} for the discrete time function using the logistic link function in the first case or for the continuous time model with different estimation method in the four latter cases (see the ddhazard for details on the methods)
+#' @param model \code{"logit"}, \code{"exp_clip_time_w_jump"}, \code{"exp_clip_time"}, \code{"exp_bin"} or \code{"exp_combined"} for the discrete time function using the logistic link function in the first case or for the continuous time model with different estimation method in the four latter cases (see the ddhazard for details on the methods)
 #' @param by Interval length of the bins in which parameters are fixed
 #' @param max_T End of the last interval. The last stop time with an event is selected if the parameter is omitted
 #' @param id Vector of ids for each row of the in the design matrix
@@ -10,6 +10,7 @@
 #' @param Q_0 Covariance matrix for the prior distribution
 #' @param Q Initial covariance matrix for the state equation
 #' @param order Order of the random walk
+#' @param weights Weights to use if e.g. a skewed sample is used
 #' @param control List of control variables (see details below)
 #' @param verbose \code{TRUE} if you want status messages during execution
 #'
@@ -24,45 +25,46 @@
 #'
 #' @section Control:
 #' The \code{control} argument allows you to pass a \code{list} to select additional parameters. See the vignette 'ddhazard' for more information on hyper parameters. Unspecified elements of the list will yield default values
-#' \tabular{ll}{
-#' \code{method}\verb{  }\tab Set to the method to use in the E-step. Either \code{"EKF"} for the Extended Kalman Filter or \code{"UKF"}for the Unscented Kalman Filter. \code{"EKF"} is the default \cr
-#' \code{LR}\verb{  }\tab Learning rate for the Extended Kalman filter \cr
-#' \code{NR_eps}\verb{  }\tab Tolerance for the Extended Kalman filter. Default is \code{NULL} which means that no extra iteration is made in the correction step \cr
-#' \code{alpha}\verb{  }\tab Hyper parameter \eqn{\alpha} in the Unscented Kalman Filter \cr
-#' \code{beta}\verb{  }\tab Hyper parameter \eqn{\beta} in the Unscented Kalman Filter  \cr
-#' \code{kappa}\verb{  }\tab Hyper parameter \eqn{\kappa} in the Unscented Kalman Filter \cr
-#' \code{n_max}\verb{  }\tab Maximum number of iteration in the EM-algorithm \cr
-#' \code{eps}\verb{  }\tab Tolerance parameter for the EM-algorithm\cr
-#' \code{est_Q_0}\verb{  }\tab\code{TRUE} if you want the EM-algorithm to estimate \code{Q_0}. Default is \code{FALSE}\cr
-#' \code{save_risk_set}\verb{  }\tab \code{TRUE} if you want to save the list from \code{\link{get_risk_obj}} used to estimate the model. It may be needed for later call to \code{residuals}, \code{plot} and \code{logLike}. Can be set to \code{FALSE} to save memory\cr
-#' \code{save_data}\verb{  }\tab \code{TRUE} if you want to save the list \code{data} argument. It may be needed for later call to \code{residuals}, \code{plot} and \code{logLike}. Can be set to \code{FALSE} to save memory \cr
-#' \code{ridge_eps}\verb{ }\tab Penalty term added to the diagonal of the covariance matrix of the observational equation in either the EKF or UKF \cr
-#' \code{fixed_terms_method}\verb{ }\tab The method used to estimate the fixed effects. Either \code{'M_step'} or \code{'E_step'} for estimation in the M-step or E-step respectively \cr
-#' \code{Q_0_term_for_fixed_E_step}\verb{ }\tab The diagonal value of the initial covariance matrix, \code{Q_0}, for the fixed effects if fixed effects are estimated in the E-step \cr
-#' \code{eps_fixed_parems}\verb{ }\tab Tolerance used in the M-step of the Fisher's Scoring Algorithm for the fixed effects
+#' \describe{
+#' \item{\code{method}}{Set to the method to use in the E-step. Either \code{"EKF"} for the Extended Kalman Filter or \code{"UKF"}for the Unscented Kalman Filter. \code{"EKF"} is the default}
+#' \item{\code{LR}}{Learning rate for the Extended Kalman filter}
+#' \item{\code{NR_eps}}{Tolerance for the Extended Kalman filter. Default is \code{NULL} which means that no extra iteration is made in the correction step}
+#' \item{\code{alpha}}{Hyper parameter \eqn{\alpha} in the Unscented Kalman Filter}
+#' \item{\code{beta}}{Hyper parameter \eqn{\beta} in the Unscented Kalman Filter }
+#' \item{\code{kappa}}{Hyper parameter \eqn{\kappa} in the Unscented Kalman Filter}
+#' \item{\code{n_max}}{Maximum number of iteration in the EM-algorithm}
+#' \item{\code{eps}}{Tolerance parameter for the EM-algorithm}
+#' \item{\code{est_Q_0}}{\code{TRUE} if you want the EM-algorithm to estimate \code{Q_0}. Default is \code{FALSE}}
+#' \item{\code{save_risk_set}}{\code{TRUE} if you want to save the list from \code{\link{get_risk_obj}} used to estimate the model. It may be needed for later call to \code{residuals}, \code{plot} and \code{logLike}. Can be set to \code{FALSE} to save memory}
+#' \item{\code{save_data}}{\code{TRUE} if you want to save the list \code{data} argument. It may be needed for later call to \code{residuals}, \code{plot} and \code{logLike}. Can be set to \code{FALSE} to save memory}
+#' \item{\code{ridge_eps}}{Penalty term added to the diagonal of the covariance matrix of the observational equation in either the EKF or UKF}
+#' \item{\code{fixed_terms_method}}{The method used to estimate the fixed effects. Either \code{'M_step'} or \code{'E_step'} for estimation in the M-step or E-step respectively}
+#' \item{\code{Q_0_term_for_fixed_E_step}}{The diagonal value of the initial covariance matrix, \code{Q_0}, for the fixed effects if fixed effects are estimated in the E-step}
+#' \item{\code{eps_fixed_parems}}{Tolerance used in the M-step of the Fisher's Scoring Algorithm for the fixed effects}
 #'}
 #'
 #' @return
 #' A list with class \code{fahrmeier_94}. The list contains:
-#' \tabular{ll}{
-#' \code{formula}\verb{ }\tab The passed formula \cr
-#' \code{state_vecs}\verb{ }\tab 2D matrix with the estimated state vectors (regression parameters) in each bin \cr
-#' \code{state_vars}\verb{ }\tab 3D array with smoothed variance estimates for each state vector \cr
-#' \code{lag_one_cov}\verb{ }\tab 3D array with lagged correlation matrix for each for each change in the state vector. Only present when the model is logit and the method is EKF \cr
-#' \code{n_risk}\verb{ }\tab The number of observations in each interval \cr
-#' \code{times}\verb{ }\tab The interval borders \cr
-#' \code{risk_set}\verb{ }\tab The object from \code{\link{get_risk_obj}} if saved \cr
-#' \code{data}\verb{ }\tab The \code{data} argument if saved \cr
-#' \code{order}\verb{ }\tab Order of the random walk \cr
-#' \code{F_}\verb{ }\tab Matrix with that map transition from one state vector to the next \cr
-#' \code{method}\verb{ }\tab Method used in the E-step \cr
-#' \code{est_Q_0}\verb{ }\tab\code{TRUE} if \code{Q_0} was estimated in the EM-algorithm \cr
-#' \code{hazard_func}\verb{ }\tab Hazard function \cr
-#' \code{hazard_first_deriv}\verb{ }\tab First derivative of the hazard function with respect to the linear predictor
+#' \describe{
+#' \item{\code{formula}}{The passed formula }
+#' \item{\code{state_vecs}}{2D matrix with the estimated state vectors (regression parameters) in each bin }
+#' \item{\code{state_vars}}{3D array with smoothed variance estimates for each state vector }
+#' \item{\code{lag_one_cov}}{3D array with lagged correlation matrix for each for each change in the state vector. Only present when the model is logit and the method is EKF }
+#' \item{\code{n_risk}}{The number of observations in each interval }
+#' \item{\code{times}}{The interval borders }
+#' \item{\code{risk_set}}{The object from \code{\link{get_risk_obj}} if saved }
+#' \item{\code{data}}{The \code{data} argument if saved }
+#' \item{\code{id}}{ids used to match rows in \code{data} to individuals }
+#' \item{\code{order}}{Order of the random walk }
+#' \item{\code{F_}}{Matrix with that map transition from one state vector to the next }
+#' \item{\code{method}}{Method used in the E-step }
+#' \item{\code{est_Q_0}}{\code{TRUE} if \code{Q_0} was estimated in the EM-algorithm }
+#' \item{\code{hazard_func}}{Hazard function }
+#' \item{\code{hazard_first_deriv}}{First derivative of the hazard function with respect to the linear predictor}
 #'}
 #'
 #' @seealso
-#' \code{\link[=plot.fahrmeier_94]{plot}}, \code{\link[=residuals.fahrmeier_94]{residuals}}, \code{\link[=predict.fahrmeier_94]{predict}}, \code{\link{static_glm}}, \code{\link{ddhazard_app}}
+#' \code{\link[=plot.fahrmeier_94]{plot}}, \code{\link[=residuals.fahrmeier_94]{residuals}}, \code{\link[=predict.fahrmeier_94]{predict}}, \code{\link{static_glm}}, \code{\link{ddhazard_app}}, \code{\link{ddhazard_boot}}
 #'
 #' @references
 #' Fahrmeir, Ludwig. \emph{Dynamic modelling and penalized likelihood estimation for discrete time survival data}. Biometrika 81.2 (1994): 317-330.
@@ -74,11 +76,44 @@ ddhazard = function(formula, data,
                     model = "logit",
                     by, max_T, id,
                     a_0, Q_0, Q = Q_0,
-                    order = 1, control = list(),
+                    order = 1, weights,
+                    control = list(),
                     verbose = F){
+
+  if(model == "exp_trunc_time"){
+    message("Model 'exp_trunc_time' have been renamed to 'exp_clip_time'")
+    model <- "exp_clip_time"
+  } else if(model == "exp_trunc_time_w_jump"){
+    message("Model 'exp_trunc_time_w_jump' have been renamed to 'exp_clip_time_w_jump'")
+    model <- "exp_clip_time_w_jump"
+  }
+
+  if(missing(id)){
+    if(verbose)
+      warning("You did not parse and Id argument")
+    id = 1:nrow(data)
+  }
+
+  if(missing(weights)){
+    weights <- rep(1, nrow(data))
+  }
+
+  if(length(weights) != nrow(data)){
+    stop("Length of weights does not match number of rows in data")
+  } else if(!missing(id) && length(weights) != length(id)){
+    stop("Length of weights does not match number of ids")
+  } else{
+    data <- data[weights > 0, ]
+    id <- id[weights > 0]
+    weights <- weights[weights > 0]
+  }
+
+  if(any(weights != 1)){
+    message("lag_one_cov will not be correct when some weights are not 1")
+  }
+
   X_Y = get_design_matrix(formula, data)
   n_params = ncol(X_Y$X)
-  tmp_n_failures = sum(X_Y$Y[, 3])
 
   if(model == "logit"){
     is_for_discrete_model <- TRUE
@@ -98,7 +133,7 @@ ddhazard = function(formula, data,
                           LR_decrease_fac = 1.5,
                           n_threads = getOption("ddhazard_max_threads"),
                           ridge_eps = .0001,
-                          fixed_terms_method = "M_step",
+                          fixed_terms_method = "E_step",
                           Q_0_term_for_fixed_E_step = NULL)
 
   if(any(is.na(control_match <- match(names(control), names(control_default)))))
@@ -116,14 +151,10 @@ ddhazard = function(formula, data,
   if(!control$fixed_terms_method %in% c("M_step", "E_step"))
     stop("fixed_terms_method method '", control$fixed_terms_method,"' is not implemented")
 
-  if(control$ridge_eps <= 0)
+  if(control$ridge_eps <= 0){
     stop("Method not implemented with penalty term (control$ridge_eps) equal to ", control$ridge_eps)
-
-  if(missing(id)){
-    if(verbose)
-      warning("You did not parse and Id argument")
-    id = 1:nrow(data)
-  }
+  } else if(control$ridge_eps < 1e-6)
+    warning("Method is no tested with penalty term (control$ridge_eps) less than ", 1e-6)
 
   if(verbose)
     message("Finding Risk set")
@@ -132,7 +163,7 @@ ddhazard = function(formula, data,
                  id = id, is_for_discrete_model = is_for_discrete_model)
 
   n_fixed <- ncol(X_Y$fixed_terms)
-  est_fixed_in_E <- control$fixed_terms_method == "E_step"
+  est_fixed_in_E <- control$fixed_terms_method == "E_step" && n_fixed > 0
 
   if(missing(Q_0)){
     Q_0 = diag(10, n_params * order) # something large. Though depends on model, estimation method and data
@@ -168,7 +199,7 @@ ddhazard = function(formula, data,
 
   if(n_params == 0){
     # Model is fitted using ddhazard_fit_cpp for testing
-    warning("The model can be estimated more effeciently by using get_survival_case_Weigths_and_data and static_glm when there is no time varying parameters")
+    warning("The model can be estimated more effeciently by using get_survival_case_Weights_and_data and static_glm when there is no time varying parameters")
     a_0 = vector()
 
     if(is.null(control$fixed_parems_start))
@@ -280,7 +311,7 @@ ddhazard = function(formula, data,
     tmp_tbl[, "Num events"] <- n_events
     tmp_tbl[, "Risk size"] <- unlist(lapply(risk_set$risk_sets, length))
 
-    message("Total number of included events are ", sum(tmp_tbl[, 2]), " of ", tmp_n_failures)
+    message("Total number of included events are ", sum(tmp_tbl[, 2]), " of ",   sum(X_Y$Y[, 3]))
     message("Size of risk set and number of events in each risk set are ([Risk set size]:[# events]):")
 
     tmp_tbl[, 1] <- sprintf("%8s", tmp_tbl[, 1])
@@ -309,25 +340,12 @@ ddhazard = function(formula, data,
   k_vals <- if(control$method == "EKF") seq_len(control$LR_max_try) - 1 else 0
   for(k in k_vals){
     tryCatch({
-      result <- ddhazard_fit_cpp(a_0 = a_0, Q_0 = Q_0, F_ = F_, verbose = verbose,
-                                 Q = Q, n_max = control$n_max,
-                                 risk_obj = risk_set, eps = control$eps,
-                                 X = X_Y$X, fixed_terms = X_Y$fixed_terms,
-                                 fixed_parems_start = control$fixed_parems_start,
-                                 tstart = X_Y$Y[, 1], tstop = X_Y$Y[, 2],
-                                 order_ = order,
-                                 est_Q_0 = control$est_Q_0, method = control$method,
-                                 model = model,
-                                 kappa = control$kappa, alpha = control$alpha, beta = control$beta,
-                                 NR_eps = control$NR_eps,
-                                 LR = control$LR / control$LR_decrease_fac^(k),
-                                 eps_fixed_parems = control$eps_fixed_parems,
-                                 max_it_fixed_params = control$max_it_fixed_params,
-                                 fixed_effect_chunk_size = control$fixed_effect_chunk_size,
-                                 debug = control$debug,
-                                 n_threads = control$n_threads,
-                                 ridge_eps = control$ridge_eps,
-                                 n_fixed_terms_in_state_vec = ifelse(est_fixed_in_E, n_fixed, 0))
+      result <- ddhazard_no_validation(a_0 = a_0, Q_0 = Q_0, F_ = F_, verbose = verbose, Q = Q,
+                                       risk_set= risk_set, X_Y = X_Y, order = order, model = model,
+                                       LR = control$LR / control$LR_decrease_fac^(k),
+                                       n_fixed_terms_in_state_vec = ifelse(est_fixed_in_E, n_fixed, 0),
+                                       weights = weights,
+                                       control)
     }, error = function(e)
       if(length(k_vals) == 1 ||
           !grepl("^ddhazard_fit_cpp estimation error:", e$message))
@@ -354,7 +372,9 @@ ddhazard = function(formula, data,
   if(est_fixed_in_E){
     # Recover the X and fixed term design matricies
     X_Y$fixed_terms <- X_Y$X[n_params + 1:n_fixed, , drop = F]
-    X_Y$X <- X_Y$X[1:n_params, , drop = F]
+    if(n_params > 0)
+      X_Y$X <- X_Y$X[1:n_params, , drop = F] else
+        X_Y$X <- matrix(nrow = 0, ncol = ncol(X_Y$X))
 
     # We need to change the dimension of various arrays
     result$V_t_d_s <- result$V_t_d_s[-indicies_fix, , , drop = F]
@@ -424,6 +444,7 @@ ddhazard = function(formula, data,
     times = c(min(X_Y$Y[, 1]), risk_set$event_times),
     risk_set = if(control$save_risk_set) risk_set else NULL,
     data = if(control$save_data) data else NULL,
+    id = if(control$save_data) id else NULL,
     order = order, F_ = F_,
     method = control$method,
     model = model,
@@ -433,5 +454,32 @@ ddhazard = function(formula, data,
     "class" = "fahrmeier_94")
 }
 
+ddhazard_no_validation <- function(a_0, Q_0, F_, verbose, Q,
+                                   risk_set, X_Y, order, model, LR,
+                                   n_fixed_terms_in_state_vec,
+                                   weights = weights,
+                                   control){
+  ddhazard_fit_cpp(a_0 = a_0, Q_0 = Q_0, F_ = F_, verbose = verbose,
+                   Q = Q, n_max = control$n_max,
+                   risk_obj = risk_set, eps = control$eps,
+                   X = X_Y$X, fixed_terms = X_Y$fixed_terms,
+                   fixed_parems_start = control$fixed_parems_start,
+                   tstart = X_Y$Y[, 1], tstop = X_Y$Y[, 2],
+                   order_ = order,
+                   est_Q_0 = control$est_Q_0, method = control$method,
+                   model = model,
+                   kappa = control$kappa, alpha = control$alpha, beta = control$beta,
+                   NR_eps = control$NR_eps,
+                   LR = LR,
+                   eps_fixed_parems = control$eps_fixed_parems,
+                   max_it_fixed_params = control$max_it_fixed_params,
+                   fixed_effect_chunk_size = control$fixed_effect_chunk_size,
+                   debug = control$debug,
+                   n_threads = control$n_threads,
+                   ridge_eps = control$ridge_eps,
+                   n_fixed_terms_in_state_vec = n_fixed_terms_in_state_vec,
+                   weights = weights)
+}
+
 exp_model_names <- c("exp_combined", "exp_bin",
-                     "exp_trunc_time", "exp_trunc_time_w_jump")
+                     "exp_clip_time", "exp_clip_time_w_jump")

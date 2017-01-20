@@ -80,13 +80,14 @@ arma::vec bigglm_updateQR<T>::variance(const arma::vec &mu){
 template<class T>
 void bigglm_updateQR<T>::update(qr_obj &qr, // Previous/starting value. Will be overwritten
             const arma::mat &X, const arma::vec &eta,
-            const arma::vec &offset, arma::vec &y) // y will not be altered
+            const arma::vec &offset, arma::vec &y, // y will not be altered
+            const arma::vec &w)
 {
   arma::vec eta_plus_off = eta + offset;
   arma::vec mu = linkinv(eta_plus_off);
   arma::vec dmu = d_mu_d_eta(eta_plus_off);
   arma::vec z = eta + (y - mu) / dmu; // note that offset is not added as in bigglm.function
-  arma::vec ww = dmu % dmu / variance(mu);
+  arma::vec ww = w % dmu % dmu / variance(mu);
 
   int n_parems = X.n_rows;
   int nrbar = qr.rbar->n_elem;
@@ -130,6 +131,7 @@ arma::vec bigglm_regcf(qr_obj &qr){
   return beta;
 }
 
+void null_deleter(arma::vec *) {}
 
 // Only exported for tests
 // [[Rcpp::export]]
@@ -138,19 +140,20 @@ void bigglm_updateQR_rcpp(arma::vec &D, arma::vec &rbar, arma::vec &thetab,
                           std::string model,
 
                           const arma::mat &X, const arma::vec &eta,
-                          const arma::vec &offset, arma::vec &y){
+                          const arma::vec &offset, arma::vec &y,
+                          const arma::vec &w){
   qr_obj qr;
-  qr.D = &D; // the latter make sure that the same memory is used
-  qr.rbar = &rbar;
-  qr.thetab = &thetab;
+  qr.D = std::shared_ptr<arma::vec>(&D, &null_deleter);
+  qr.rbar = std::shared_ptr<arma::vec>(&rbar, &null_deleter);
+  qr.thetab = std::shared_ptr<arma::vec>(&thetab, &null_deleter);
   qr.ss = ss;
   qr.checked = checked;
-  qr.tol = &tol;
+  qr.tol = std::shared_ptr<arma::vec>(&tol, &null_deleter);
 
   if(model == "logit"){
-    return(bigglm_updateQR_logit().update(qr, X, eta, offset, y));
+    return(bigglm_updateQR_logit().update(qr, X, eta, offset, y, w));
   } else if (is_exponential_model(model)){
-    return(bigglm_updateQR_poisson().update(qr, X, eta, offset, y));
+    return(bigglm_updateQR_poisson().update(qr, X, eta, offset, y, w));
   }
 }
 
@@ -159,12 +162,12 @@ void bigglm_updateQR_rcpp(arma::vec &D, arma::vec &rbar, arma::vec &thetab,
 arma::vec bigglm_regcf_rcpp(arma::vec &D, arma::vec &rbar, arma::vec &thetab,
                             double &ss, bool &checked, arma::vec &tol){
   qr_obj qr;
-  qr.D = &D;
-  qr.rbar = &rbar;
-  qr.thetab = &thetab;
+  qr.D = std::shared_ptr<arma::vec>(&D, &null_deleter);
+  qr.rbar = std::shared_ptr<arma::vec>(&rbar, &null_deleter);
+  qr.thetab = std::shared_ptr<arma::vec>(&thetab, &null_deleter);
   qr.ss = ss;
   qr.checked = checked;
-  qr.tol = &tol;
+  qr.tol = std::shared_ptr<arma::vec>(&tol, &null_deleter);
 
   return(bigglm_regcf(qr));
 }

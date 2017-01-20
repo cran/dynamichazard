@@ -1,6 +1,10 @@
 if(interactive()){
-  library(survival); library(testthat); source("R/test_utils.R"); library(dynamichazard)
+  library(survival); library(testthat); library(dynamichazard)
   exp_model_names <- with(environment(ddhazard), exp_model_names)
+
+  if(grepl("testthat$", getwd()))
+    source("../../R/test_utils.R") else
+      source("./R/test_utils.R")
 }
 
 # Had issues with cran buil. Thus, these lines
@@ -48,17 +52,20 @@ test_that("Different forms of fixing the intercept gives same results",{
       ddhazard(survival::Surv(tstart, tstop, event) ~ ddFixed(1) + x1 + x2,
                model = m, by = 2.5, data = sims, max_T = 10,
                Q_0 = diag(1, 2), Q = diag(.1, 2),
-               control = list(ridge_eps = .01, eps = .1))))
+               control = list(ridge_eps = .01, eps = .1,
+                              fixed_terms_method = "M_step"))))
     m2 <- suppressWarnings(suppressMessages(
       ddhazard(survival::Surv(tstart, tstop, event) ~ -1 + ddFixed(1) + x1 + x2,
                model = m, by = 2.5, data = sims, max_T = 10,
                Q_0 = diag(1, 2), Q = diag(.1, 2),
-               control = list(ridge_eps = .01, eps = .1))))
+               control = list(ridge_eps = .01, eps = .1,
+                              fixed_terms_method = "M_step"))))
     m3 <- suppressWarnings(suppressMessages(
       ddhazard(survival::Surv(tstart, tstop, event) ~ -1 + ddFixed(rep(1, length(x1))) + x1 + x2,
                model = m, by = 2.5, data = sims, max_T = 10,
                Q_0 = diag(1, 2), Q = diag(.1, 2),
-               control = list(ridge_eps = .01, eps = .1))))
+               control = list(ridge_eps = .01, eps = .1,
+                              fixed_terms_method = "M_step"))))
 
     expect_equal(m1$state_vecs, m2$state_vecs, tolerance = 1e-5)
     expect_equal(m1$fixed_effects, m2$fixed_effects, tolerance = 1e-5)

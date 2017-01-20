@@ -1,5 +1,10 @@
 if(interactive()){
-  library(dynamichazard); library(testthat); library(survival); source("R/test_utils.R")
+  library(dynamichazard); library(testthat); library(survival)
+
+  if(grepl("testthat$", getwd()))
+    source("../../R/test_utils.R") else
+      source("./R/test_utils.R")
+
   exp_model_names <- with(environment(ddhazard), exp_model_names)
 }
 
@@ -560,7 +565,7 @@ test_that("UKF on simulated data works with exponential models with only one of 
     max_T = 10,
     id = sims$res$id, order = 1,
     verbose = F,
-    model = "exp_trunc_time"))
+    model = "exp_clip_time"))
   # sink()
   # close(tmp)
 
@@ -629,7 +634,7 @@ test_that("UKF on simulated data works with exponential models with only one of 
                , tolerance = 1e-04)
 
   expect_equal(unname(c(result_exp$model)),
-               c("exp_trunc_time" )
+               c("exp_clip_time" )
                , tolerance = 1e-04)
 
   expect_equal(unname(c(result_exp$est_Q_0)),
@@ -653,7 +658,7 @@ test_that("UKF on simulated data works with exponential models with only one of 
     max_T = 10,
     id = sims$res$id, order = 1,
     verbose = F,
-    model = "exp_trunc_time_w_jump"))
+    model = "exp_clip_time_w_jump"))
   # sink()
   # close(tmp)
 
@@ -722,7 +727,7 @@ test_that("UKF on simulated data works with exponential models with only one of 
                , tolerance = 1e-04)
 
   expect_equal(unname(c(result_exp$model)),
-               c("exp_trunc_time_w_jump" )
+               c("exp_clip_time_w_jump" )
                , tolerance = 1e-04)
 
   expect_equal(unname(c(result_exp$est_Q_0)),
