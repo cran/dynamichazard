@@ -147,12 +147,13 @@ get_norm_draw = compiler::cmpfun(get_norm_draw, options = list(
 # microbenchmark(get_unif_draw(100), runif(100))
 
 # Define functions to simulate outcomes
-test_sim_func_logit <- function(n_series, n_vars = 10, t_0 = 0, t_max = 10, x_range = .1, x_mean = -.1,
+test_sim_func_logit <- function(n_series, n_vars = 10L, t_0 = 0L, t_max = 10L, x_range = .1, x_mean = -.1,
                                 re_draw = T, beta_start = 3, intercept_start,
                                 sds = rep(1, n_vars + !missing(intercept_start)),
                                 is_fixed = c(), lambda = 1,
                                 tstart_sampl_func = function(t_0 = t_0, t_max = t_max)
-                                  t_0){
+                                  t_0,
+                                betas){
   # Make output matrix
   n_row_max <- n_row_inc <- 10^5
   res <- matrix(NA_real_, nrow = n_row_inc, ncol = 4 + n_vars,
@@ -169,15 +170,19 @@ test_sim_func_logit <- function(n_series, n_vars = 10, t_0 = 0, t_max = 10, x_ra
     beta_start <- rep(beta_start, n_vars)
 
   # draw betas
-  use_intercept <- !missing(intercept_start)
-  betas <- matrix(get_norm_draw((t_max - t_0 + 1) * (n_vars + use_intercept)),
-                  ncol = n_vars + use_intercept, nrow = t_max - t_0 + 1)
-  betas <- t(t(betas) * sds)
-  betas[1, ] <- if(use_intercept) c(intercept_start, beta_start) else beta_start
-  betas <- apply(betas, 2, cumsum)
+  if(missing(betas)){
+    use_intercept <- !missing(intercept_start)
+    betas <- matrix(get_norm_draw((t_max - t_0 + 1) * (n_vars + use_intercept)),
+                    ncol = n_vars + use_intercept, nrow = t_max - t_0 + 1)
+    betas <- t(t(betas) * sds)
+    betas[1, ] <- if(use_intercept) c(intercept_start, beta_start) else beta_start
+    betas <- apply(betas, 2, cumsum)
 
-  betas[, is_fixed] <- matrix(rep(betas[1, is_fixed], nrow(betas)), byrow = T,
-                              nrow = nrow(betas))
+    betas[, is_fixed] <- matrix(rep(betas[1, is_fixed], nrow(betas)), byrow = T,
+                                nrow = nrow(betas))
+  } else {
+    use_intercept = ncol(betas) >= n_vars
+  }
 
   ceiler <- function(x) ceiling(x * 100) / 100
   x_adj <- - x_range / 2 + x_mean
@@ -185,20 +190,23 @@ test_sim_func_logit <- function(n_series, n_vars = 10, t_0 = 0, t_max = 10, x_ra
   # Simulate
   for(id in 1:n_series){
     tstart <- tstop <- ceiler(tstart_sampl_func(t_0, t_max))
+    interval_start <- ceiling(tstart)
     repeat{
       tstop <- ceiler(tstart + 1 / lambda * get_exp_draw(1) + 1)
-      if(ceiling(tstop) >= t_max)
+      if(tstop >= t_max)
         tstop <- t_max
 
       x_vars <- x_range * get_unif_draw(n_vars) + x_adj
       l_x_vars <- if(use_intercept) c(1, x_vars) else x_vars
 
       tmp_t <- tstart
-      while(tmp_t < ceiling(tstop)){
-        exp_eta <- exp((betas[floor(tmp_t - t_0) + 2, ] %*% l_x_vars)[1, 1])
+      while(tmp_t <= interval_start &&  interval_start < tstop) {
+        exp_eta <- exp((betas[interval_start + 2, ] %*% l_x_vars)[1, 1])
         event <- exp_eta / (1 + exp_eta) > get_unif_draw(1)
-        if(event){
-          tstop <- ceiling(min(tmp_t + 1, t_max)) # tstop can at most be t_max
+
+        interval_start <- interval_start + 1L
+        if(event || interval_start >= t_max){
+          tstop <- interval_start
           break
         }
 
@@ -213,7 +221,7 @@ test_sim_func_logit <- function(n_series, n_vars = 10, t_0 = 0, t_max = 10, x_ra
       }
       cur_row <- cur_row + 1
 
-      if(event || tstop >= t_max)
+      if(event || interval_start >= t_max)
         break
 
       tstart <- tstop
@@ -265,15 +273,15 @@ test_sim_func_exp <- function(n_series, n_vars = 10, t_0 = 0, t_max = 10, x_rang
   betas[, is_fixed] <- matrix(rep(betas[1, is_fixed], nrow(betas)), byrow = T,
                               nrow = nrow(betas))
 
-  ceiler <- function(x) ceiling(x * 100) / 100
+  ceiler <- function(x, level=1) round(x + 5*10^(-level-1), level)
 
   # Simulate
   mean_term <- - x_range / 2 + x_mean
 
   for(id in 1:n_series){
-    tstart <- tstop <-  ceiler(tstart_sampl_func(t_0, t_max))
+    tstart <- tstop <-  ceiler(tstart_sampl_func(t_0, t_max), 2)
     repeat{
-      tstop <- ceiler(tstart + get_exp_draw(1)/lambda)
+      tstop <- ceiler(tstart + get_exp_draw(1)/lambda, 2)
 
       x_vars <- x_range * get_unif_draw(n_vars) + mean_term
       l_x_vars <- if(use_intercept) c(1, x_vars) else x_vars
@@ -281,11 +289,10 @@ test_sim_func_exp <- function(n_series, n_vars = 10, t_0 = 0, t_max = 10, x_rang
       tmp_t <- tstart
       while(tmp_t < tstop && tmp_t < t_max){
         delta_max <- min(ceiling(tmp_t + 1e-14), tstop) - tmp_t
-        hazzard <- 1 - exp( - (
-          exp((betas[floor(tmp_t - t_0) + 2, ] %*% l_x_vars)[1, 1]) * delta_max))
-        event <- hazzard > get_unif_draw(1)
+        new_time <- get_exp_draw(1) / exp(drop(betas[floor(tmp_t - t_0) + 2, ] %*% l_x_vars))
+        event <- new_time <= delta_max
         if(event){
-          tstop <- ceiler(get_unif_draw(1) * delta_max + tmp_t) # Arrival time is uniform conditional on event
+          tstop <- ceiler(new_time + tmp_t, 14)
           break
         }
 
@@ -347,6 +354,33 @@ get_expect_equal <- function(x, eps, file = ""){
   invisible()
 }
 
+# And we may aswell just save it to a file
+save_to_test <- function(obj, file_name, tolerance = sqrt(.Machine$double.eps)){
+  if(!interactive())
+    stop("save_to_test called not in interactive mode. Likely an error")
+
+  if(getOption("ddhazard_max_threads") != 2)
+    warning("getOption('ddhazard_max_threads') is not 2. You likeli dont want this so call\noptions(ddhazard_max_threads = 2)")
+
+  cat("Largest sizes:\n")
+  if(is.list(obj))
+    print(head(sort(unlist(lapply(obj, object.size)), decreasing = T))) else
+      print(object.size(obj))
+
+  saveRDS(obj, compress = T, paste0(
+    stringr::str_match(getwd(), ".+dynamichazard"), "/tests/testthat/previous_results/", file_name, ".RDS"))
+
+  cat("Call 'expect_equal(", deparse(substitute(obj)), ", read_to_test(\"",  file_name, "\"), tolerance = ",
+      tolerance, ")' to test\n", sep = "")
+}
+
+read_to_test <- function(file_name){
+  path <- if(!interactive()) "./previous_results/" else
+    paste0(stringr::str_match(getwd(), ".+dynamichazard"), "/tests/testthat/previous_results/")
+
+  readRDS(paste0(path, file_name, ".RDS"))
+}
+
 ########
 # PBC data set from survival with the timevariying covariates
 # See: https://cran.r-project.org/web/packages/survival/vignettes/timedep.pdf
@@ -356,9 +390,14 @@ suppressWarnings(rm(pbc))
 pbc <- survival::pbc
 pbcseq <- survival::pbcseq
 
-temp <- subset(pbc, id <= 312, select=c(id:sex, stage)) # baseline
-pbc2 <- survival::tmerge(temp, temp, id=id, death = event(time, status)) #set range
-pbc2 <- survival::tmerge(pbc2, pbcseq, id=id, ascites = tdc(day, ascites),
-                         bili = tdc(day, bili), albumin = tdc(day, albumin),
-                         protime = tdc(day, protime), alk.phos = tdc(day, alk.phos))
+temp <- subset(pbc, id <= 312, select=c(id, sex, time, status, edema, age))
+pbc2 <- survival::tmerge(
+  temp, temp, id=id, death = event(time, status))
+pbc2 <- survival::tmerge(
+  pbc2, pbcseq, id=id, albumin = tdc(day, albumin),
+  protime = tdc(day, protime), bili = tdc(day, bili))
+pbc2 <- pbc2[, c("id", "tstart", "tstop", "death", "sex", "edema",
+                 "age", "albumin", "protime", "bili")]
+
+rm(temp)
 

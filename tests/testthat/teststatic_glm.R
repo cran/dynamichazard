@@ -11,11 +11,12 @@ if(interactive()){
 # Had issues with win builder. Thus, these lines
 test_name <- "static_glm"
 cat("\nRunning", test_name, "\n")
+options(ddhazard_use_speedglm = F)
 
 
 
-
-sims <- test_sim_func_logit(n_series = 1e4, n_vars = 3, t_0 = 0, t_max = 10,
+set.seed(615015)
+sims <- test_sim_func_logit(n_series = 1e3, n_vars = 3, t_0 = 0, t_max = 10,
                             x_range = 1, x_mean = .5, re_draw = T, beta_start = 0,
                             intercept_start = -3, sds = c(.1, rep(1, 3)))
 
@@ -42,27 +43,22 @@ test_that("Static glm yields expected number of events, correct rows and same re
   expect_equal(res_own_risk_obj$coefficients, res$coefficients)
 })
 
-# matplot(sims$betas, type = "l", ylim = range(sims$betas, res$coefficients),
-#         col = 1:4)
-# sum(sims$res$event)
-# abline(h = res$coefficients, col  = 1:4)
-
-set.seed(33587)
-sims <- test_sim_func_exp(n_series = 1e4, n_vars = 3, t_0 = 0, t_max = 10,
-                          x_range = 1, x_mean = .5, re_draw = T, beta_start = 0,
-                          intercept_start = -3, sds = c(.1, rep(1, 3)))
-
 test_that("static glm gives results with exponential that match previous computations", {
+  set.seed(33587)
+  sims <- test_sim_func_exp(n_series = 1e3, n_vars = 3, t_0 = 0, t_max = 10,
+                            x_range = 1, x_mean = .5, re_draw = T, beta_start = 0,
+                            intercept_start = -3, sds = c(.1, rep(1, 3)))
+
   form <- survival::Surv(tstart, tstop, event) ~ . - id - tstart - tstop - event
   res <- dynamichazard::static_glm(
     form = form, data = sims$res, by = 1, max_T = 10, id = sims$res$id,
     family = "exponential", model = T)
 
   tmp <- res["coefficients"]
-  # get_expect_equal(tmp, file = "tmp.txt")
+  # print(unname(c(tmp$coefficients)), digits = 16)
 
   expect_equal(unname(c(tmp$coefficients)),
-               c(-3.2995553492491152, 0.5601471676957662, 1.3456006304511172, -0.8888937783727533  ))
+               c(-3.1239104299217413, 0.5945953199533323, 1.0979243555250271, -0.9534880608516028))
 
   # test with lower max_T
   res_lower <- dynamichazard::static_glm(
@@ -73,7 +69,7 @@ test_that("static glm gives results with exponential that match previous computa
   # get_expect_equal(tmp)
 
   expect_equal(unname(c(tmp$coefficients)),
-               c(-2.98973053733078498, -0.21626321275614255, 0.02785842252341138, -1.39295562622901259))
+               c(-2.7762125831981495, -0.3728709821372309, -0.2619269145416432, -1.4856958985013418 ))
 })
 
 test_that("design_matrix yields equal result with different values of use_weights", {
@@ -82,8 +78,10 @@ test_that("design_matrix yields equal result with different values of use_weight
     form = form, data = sims$res, by = 1, max_T = 10, id = sims$res$id,
     family = "logit", model = T)
 
-  expect_equal(unname(res$coefficients), c(-2.93840401792663775, 0.30150117426768974,  0.80625660765174056, -0.59413513020434738))
+  res <- res[c("coefficients")]
+  # save_to_test(res, "static1")
 
+  expect_equal(res, read_to_test("static1"))
 
   data_f <- get_survival_case_weights_and_data(formula = form, data = sims$res, by = 1,
                                                max_T = 10, id = sims$res$id, use_weights = F)$X
@@ -96,12 +94,82 @@ test_that("design_matrix yields equal result with different values of use_weight
   expect_equal(glm_res$coefficients, res$coefficients)
 })
 
-# cols <- rainbow(4)
-# matplot(sims$betas, type = "l", lty = 1, col = cols)
-# abline(h = res$coefficients, lty = 2, col = cols)
-# sum(sims$res$event)
 
+test_that("get_survival_case_weights_and_data work w/ factors and weights",{
+  tmp <- data.frame(
+    start = 0:4 * 2,
+    stop = 1:5 * 2,
+    x = factor(c("a", "a", "b", "b", "c")))
 
+  suppressWarnings(
+    res <- get_survival_case_weights_and_data(
+      Surv(start, stop, rep(1, 5)) ~ x,
+      data = tmp, by = 1, max_T = 10, use_weights = F))
+
+  expect_equal(tmp$x, res$X$x[1:5*2])
+})
+
+test_that("Gets error with only_coef = TRUE and no mf",{
+  expect_error(
+    static_glm(only_coef = T),
+    "^mf must be supplied when only_coef = TRUE$")
+})
+
+test_that("Gets same with glm with only_coef = TRUE", {
+  set.seed(3946519)
+  sims <-
+    test_sim_func_logit(
+      n_series = 5e2, n_vars = 4, beta_start = rnorm(4),
+      intercept_start = - 5, sds = c(sqrt(.1), rep(.3, 4)),
+      x_range = 2, x_mean = .5)$res
+
+  # We include a transformation which will affect the final model.frame so that
+  # it does not just include the linear terms
+  frm <- Surv(tstart, tstop, event) ~ . - tstart - tstop - event - id + x1^2
+
+  for(m in c("logit", "exponential")){
+    tmp <- get_design_matrix(frm, sims)
+
+    f1 <- static_glm(
+      frm, data = sims, by = 1, max_T = 10, family = m,
+      id = sims$id, only_coef = T, mf = cbind(tmp$X, tmp$fixed_terms))
+    f2 <- static_glm(
+      frm, data = sims, by = 1, max_T = 10, family = m,
+      id = sims$id, only_coef = F)
+
+    expect_equal(f1, f2$coefficients)
+  }
+})
+
+test_that("Gets same with speedglm with only_coef = TRUE", {
+  if(requireNamespace("speedglm", quietly = T)){
+    set.seed(3946519)
+    sims <-
+      test_sim_func_logit(
+        n_series = 5e2, n_vars = 4, beta_start = rnorm(4),
+        intercept_start = - 5, sds = c(sqrt(.1), rep(.3, 4)),
+        x_range = 2, x_mean = .5)$res
+
+    # We include a transformation which will affect the final model.frame so that
+    # it does not just include the linear terms
+    frm <- Surv(tstart, tstop, event) ~ . - tstart - tstop - event - id + x1^2
+
+    for(m in c("logit", "exponential")){
+      tmp <- get_design_matrix(frm, sims)
+
+      f1 <- static_glm(
+        frm, data = sims, by = 1, max_T = 10, family = m,
+        id = sims$id, only_coef = T, mf = cbind(tmp$X, tmp$fixed_terms),
+        speedglm = T)
+      f2 <- static_glm(
+        frm, data = sims, by = 1, max_T = 10, family = m,
+        id = sims$id, only_coef = F,
+        speedglm = T)
+
+      expect_equal(f1, f2$coefficients)
+    }
+  }
+})
 
 # Had issues with win builder. Thus, these lines
 cat("\nFinished", test_name, "\n")

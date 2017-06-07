@@ -1,10 +1,10 @@
-#include "dynamichazard.h"
+#include "ddhazard.h"
 
 class logLike_link_term_helper{
 private:
   using uvec_iter = arma::uvec::const_iterator;
 
-  // function that takes in a linear predictor and delta time
+  // function that takes the inear predictor and delta time
   virtual double link_term_if_death(const double &, const double &) = 0;
   virtual double link_term_if_control(const double &, const double &) = 0;
 
@@ -132,24 +132,26 @@ std::vector<double>
     }
 
     // compute first terms and normalizing constant
-    t_0_logLike = - 1.0 / 2.0 * arma::det(Q_0)
+    double log_det_Q, dum;
+    arma::log_det(log_det_Q, dum, Q_0);
+    t_0_logLike = - 1.0 / 2.0 * log_det_Q
       - n_parems / 2.0 * (log(2.0) + log(M_PI));
-
-    logLike = - d / 2.0 * arma::det(Q)
-      - d * n_parems / 2.0 * (log(2.0) + log(M_PI));
   }
 
-  logLike_link_term_helper *helper;
+  std::unique_ptr<logLike_link_term_helper> helper;
   if(model == "logit"){
-    helper = new logLike_link_term_helper_logit(X, tstart, tstop, is_event_in_bin, fixed_effects_offsets);
+    helper.reset(new logLike_link_term_helper_logit(X, tstart, tstop, is_event_in_bin, fixed_effects_offsets));
 
   } else if (is_exponential_model(model)){
-    helper = new logLike_link_term_helper_cloglog(X, tstart, tstop, is_event_in_bin, fixed_effects_offsets);
+    helper.reset(new logLike_link_term_helper_cloglog(X, tstart, tstop, is_event_in_bin, fixed_effects_offsets));
 
   } else{
     Rcpp::stop("Model '" + model + "' not implemented for logLike method");
   }
 
+
+  double log_det_Q, dum;
+  arma::log_det(log_det_Q, dum, Q);
   double bin_stop = Rcpp::as<double>(risk_obj["min_start"]);
   for(int t = 1; t <= d; ++t){
     double bin_Start = bin_stop;
@@ -159,6 +161,9 @@ std::vector<double>
     if(any_dynamic){
       a_t = a_t_d_s.col(t);
       arma::vec delta = a_t.head(n_parems) - F.head_rows(n_parems) * a_t_d_s.col(t - 1);
+
+      logLike -=  1.0/ 2.0 * (log_det_Q + log(bin_stop - bin_Start))
+        + n_parems / 2.0 * (log(2.0) + log(M_PI));
 
       logLike -= 1.0 / 2.0 * pow(bin_stop - bin_Start, -1) * arma::as_scalar(
         delta.t() * (Q_inv  * delta));

@@ -2,7 +2,7 @@
 #' @description  Function to fit dynamic discrete hazard models using state space models
 #' @param formula \code{\link[survival]{coxph}} like formula with \code{\link[survival]{Surv}(tstart, tstop, event)} on the left hand site of \code{~}
 #' @param data Data frame or environment containing the outcome and co-variates
-#' @param model \code{"logit"}, \code{"exp_clip_time_w_jump"}, \code{"exp_clip_time"}, \code{"exp_bin"} or \code{"exp_combined"} for the discrete time function using the logistic link function in the first case or for the continuous time model with different estimation method in the four latter cases (see the ddhazard for details on the methods)
+#' @param model \code{"logit"}, \code{"exp_clip_time_w_jump"}, \code{"exp_clip_time"} or \code{"exp_bin"} for the discrete time function using the logistic link function in the first case or for the continuous time model with different estimation method in the three latter cases (see the ddhazard vignette for details of the methods)
 #' @param by Interval length of the bins in which parameters are fixed
 #' @param max_T End of the last interval. The last stop time with an event is selected if the parameter is omitted
 #' @param id Vector of ids for each row of the in the design matrix
@@ -17,16 +17,16 @@
 #' @details
 #' This function can be used to estimate a binary regression where the regression parameters follows a given order random walk. The order is specified by the \code{order} argument. 1. and 2. order random walks is implemented. The regression parameters are updated at time \code{by}, 2\code{by}, ..., \code{max_T}. See the vignette 'ddhazard' for more details
 #'
-#' The Extended Kalman filter or Unscented Kalman filter needs an initial co-variance matrix \code{Q_0} and state vector \code{a_0}. An estimate from a time-invariant model is provided for \code{a_0} if it is not supplied (the same model you would get from \code{\link{static_glm}} function). A diagonal matrix with large entries is recommended for \code{Q_0}. What is large dependents on the data set and \code{model}. Further, a variance matrix for the first iteration \code{Q} is needed. It is recommended to select diagonal matrix with low values for the latter. The \code{Q}, \code{a_0} and optionally \code{Q_0} is estimated with an EM-algorithm
+#' All filter methods needs a state covariance matrix \code{Q_0} and state vector \code{a_0}. An estimate from a time-invariant model is provided for \code{a_0} if it is not supplied (the same model you would get from \code{\link{static_glm}} function). A diagonal matrix with large entries is recommended for \code{Q_0}. What is large dependents on the data set and \code{model}. Further, a variance matrix for the first iteration \code{Q} is needed. It is recommended to select diagonal matrix with low values for the latter. The \code{Q}, \code{a_0} and optionally \code{Q_0} is estimated with an EM-algorithm
 #'
-#' The model is specified through the \code{model} argument. Currently, \code{'logit'} and \code{'exponential'} is available. The former uses an logistic model where outcomes are binned into the intervals. Be aware that there can be loss of information due to binning. It is key for the logit model that the \code{id} argument is provided if individuals in the data set have time varying co-variates. The latter model uses an exponential model for the arrival times where there is no loss information due to binning
+#' The model is specified through the \code{model} argument. See the \code{model} in the argument above for details. The logistic model is where outcomes are binned into the intervals. Be aware that there can be loss of information due to binning. It is key for the logit model that the \code{id} argument is provided if individuals in the data set have time varying co-variates. The the exponential models use an exponential model for the arrival times where there is no loss information due to binning
 #'
 #' It is recommended to see the Shiny app demo for this function by calling \code{\link{ddhazard_app}()}
 #'
 #' @section Control:
 #' The \code{control} argument allows you to pass a \code{list} to select additional parameters. See the vignette 'ddhazard' for more information on hyper parameters. Unspecified elements of the list will yield default values
 #' \describe{
-#' \item{\code{method}}{Set to the method to use in the E-step. Either \code{"EKF"} for the Extended Kalman Filter or \code{"UKF"}for the Unscented Kalman Filter. \code{"EKF"} is the default}
+#' \item{\code{method}}{Set to the method to use in the E-step. Either \code{"EKF"} for the Extended Kalman Filter, \code{"UKF"}for the Unscented Kalman Filter, \code{"SMA"} for the sequential posterior mode approximation method or \code{"GMA"} for the global mode approximation method. \code{"EKF"} is the default}
 #' \item{\code{LR}}{Learning rate for the Extended Kalman filter}
 #' \item{\code{NR_eps}}{Tolerance for the Extended Kalman filter. Default is \code{NULL} which means that no extra iteration is made in the correction step}
 #' \item{\code{alpha}}{Hyper parameter \eqn{\alpha} in the Unscented Kalman Filter}
@@ -37,10 +37,15 @@
 #' \item{\code{est_Q_0}}{\code{TRUE} if you want the EM-algorithm to estimate \code{Q_0}. Default is \code{FALSE}}
 #' \item{\code{save_risk_set}}{\code{TRUE} if you want to save the list from \code{\link{get_risk_obj}} used to estimate the model. It may be needed for later call to \code{residuals}, \code{plot} and \code{logLike}. Can be set to \code{FALSE} to save memory}
 #' \item{\code{save_data}}{\code{TRUE} if you want to save the list \code{data} argument. It may be needed for later call to \code{residuals}, \code{plot} and \code{logLike}. Can be set to \code{FALSE} to save memory}
-#' \item{\code{ridge_eps}}{Penalty term added to the diagonal of the covariance matrix of the observational equation in either the EKF or UKF}
+#' \item{\code{denom_term}}{Term added to denominators in either the EKF or UKF}
+#' \item{\code{fixed_parems_start}}{Starting value for fixed terms}
 #' \item{\code{fixed_terms_method}}{The method used to estimate the fixed effects. Either \code{'M_step'} or \code{'E_step'} for estimation in the M-step or E-step respectively}
 #' \item{\code{Q_0_term_for_fixed_E_step}}{The diagonal value of the initial covariance matrix, \code{Q_0}, for the fixed effects if fixed effects are estimated in the E-step}
 #' \item{\code{eps_fixed_parems}}{Tolerance used in the M-step of the Fisher's Scoring Algorithm for the fixed effects}
+#' \item{\code{permu}}{\code{TRUE} if the risk sets should be permutated before computation. This is \code{TRUE} by default for posterior mode approximation method and \code{FALSE} for all other methods}
+#' \item{\code{posterior_version}}{The implementation version of the posterior approximation method. Either \code{"woodbury"} or \code{"cholesky"}}
+#' \item{\code{GMA_max_rep}}{Maximum number of iterations in the correction step if \code{method = 'GMA'}}
+#' \item{\code{GMA_NR_eps}}{Tolerance for the convergence criteria for the relative change in the norm of the coefficients in the correction step if \code{method = 'GMA'}}
 #'}
 #'
 #' @return
@@ -57,7 +62,7 @@
 #' \item{\code{id}}{ids used to match rows in \code{data} to individuals }
 #' \item{\code{order}}{Order of the random walk }
 #' \item{\code{F_}}{Matrix with that map transition from one state vector to the next }
-#' \item{\code{method}}{Method used in the E-step }
+#' \item{\code{method}}{Method used in the E-step}
 #' \item{\code{est_Q_0}}{\code{TRUE} if \code{Q_0} was estimated in the EM-algorithm }
 #' \item{\code{hazard_func}}{Hazard function }
 #' \item{\code{hazard_first_deriv}}{First derivative of the hazard function with respect to the linear predictor}
@@ -86,6 +91,8 @@ ddhazard = function(formula, data,
   } else if(model == "exp_trunc_time_w_jump"){
     message("Model 'exp_trunc_time_w_jump' have been renamed to 'exp_clip_time_w_jump'")
     model <- "exp_clip_time_w_jump"
+  } else if(model == "exp_combined"){
+    stop("'exp_combined' is not supported since version 0.3.0")
   }
 
   if(missing(id)){
@@ -125,16 +132,23 @@ ddhazard = function(formula, data,
     stop("Model '", model, "' is not implemented")
 
   control_default <- list(kappa = NULL, alpha = 1, beta = 0,
-                          NR_eps = NULL, LR = 1, n_max = 10^2, eps = 10^-3,
+                          NR_eps = NULL, LR = 1, n_max = 10^2, eps = .01,
                           est_Q_0 = F, method = "EKF", save_risk_set = T,
                           save_data = T, eps_fixed_parems = 1e-3,
                           max_it_fixed_params = 10, fixed_effect_chunk_size = 1e4,
                           debug = F, fixed_parems_start = NULL, LR_max_try = 10,
-                          LR_decrease_fac = 1.5,
+                          LR_decrease_fac = 0.9,
                           n_threads = getOption("ddhazard_max_threads"),
-                          ridge_eps = .0001,
+                          denom_term = .0001,
                           fixed_terms_method = "E_step",
-                          Q_0_term_for_fixed_E_step = NULL)
+                          Q_0_term_for_fixed_E_step = NULL,
+                          use_pinv = T, criteria = "delta_coef",
+                          permu = if(!is.null(control$method))
+                            control$method == "SMA" else F,
+                          posterior_version = "cholesky",
+                          GMA_max_rep = 10,
+                          GMA_NR_eps = 0.1,
+                          EKF_batch_size = 2000L)
 
   if(any(is.na(control_match <- match(names(control), names(control_default)))))
     stop("These control parameters are not recognized: ",
@@ -143,18 +157,21 @@ ddhazard = function(formula, data,
   control_default[control_match] <- control
   control <- control_default
 
+  if(!control$criteria %in% c("delta_coef", "delta_likeli"))
+    stop("Convergence criteria ", control$criteria, " not implemented")
+
   if(is.null(control$Q_0_term_for_fixed_E_step)){
     control$Q_0_term_for_fixed_E_step <- ifelse(
-      control$method == "UKF", 1, 1e5) # quite abritary values (especially the former - the latter is not too important)
+      control$method %in% c("UKF", "GMA"), 1, 1e5) # quite abritary values (especially the former - the latter is not too important)
   }
 
   if(!control$fixed_terms_method %in% c("M_step", "E_step"))
     stop("fixed_terms_method method '", control$fixed_terms_method,"' is not implemented")
 
-  if(control$ridge_eps <= 0){
-    stop("Method not implemented with penalty term (control$ridge_eps) equal to ", control$ridge_eps)
-  } else if(control$ridge_eps < 1e-6)
-    warning("Method is no tested with penalty term (control$ridge_eps) less than ", 1e-6)
+  if(control$denom_term <= 0){
+    stop("Method not implemented with penalty term (control$denom_term) equal to ", control$denom_term)
+  } else if(control$denom_term < 1e-6)
+    warning("Method is no tested with penalty term (control$denom_term) less than ", 1e-6)
 
   if(verbose)
     message("Finding Risk set")
@@ -172,30 +189,13 @@ ddhazard = function(formula, data,
       Q = diag(1, n_params) # (Very) arbitrary default
   }
 
-  if(order == 1){
-    F_ = diag(rep(1, n_params + n_fixed * est_fixed_in_E))
-  }
-  else if(order == 2){
-    indicies_cur <- 1:n_params
-    indicies_lag <- n_params + 1:n_params + ifelse(est_fixed_in_E, n_fixed, 0)
-    indicies_fix <- if(est_fixed_in_E) 1:n_fixed + n_params else vector()
+  F_ <- get_F(order, n_params, n_fixed, est_fixed_in_E)
 
-    F_ = matrix(NA_real_,
-                nrow = 2 * n_params + n_fixed * est_fixed_in_E,
-                ncol = 2 * n_params + n_fixed * est_fixed_in_E)
-    F_[indicies_cur, indicies_cur] = diag(2, n_params)
-    F_[indicies_lag, indicies_cur] = diag(1, n_params)
-    F_[indicies_cur, indicies_lag] = diag(-1, n_params)
-    F_[indicies_lag, indicies_lag] = 0
-
-    if(length(indicies_fix) > 0){
-      F_[indicies_fix, ] <- 0
-      F_[, indicies_fix] <- 0
-      if(length(indicies_fix) > 1)
-        diag(F_[indicies_fix, indicies_fix]) <- 1 else
-          F_[indicies_fix, indicies_fix] <- 1
-    }
-  } else stop("Method not implemented for order ", order)
+  # Check if there are any fixed coefficients. If not set the fixed
+  # coefficients to an empty vector
+  if(is.null(attr(X_Y$formula, "specials")[ddfixed_specials]))
+    if(is.null(control$fixed_parems_start))
+      control$fixed_parems_start <- vector("double")
 
   if(n_params == 0){
     # Model is fitted using ddhazard_fit_cpp for testing
@@ -207,31 +207,52 @@ ddhazard = function(formula, data,
         control$fixed_parems_start <- control$fixed_parems_start
 
   } else if((missing_a_0 <- missing(a_0)) |
-            (missing_fixed <- is.null(control$fixed_parems_start))){
+            (missing_fixed <- (is.null(control$fixed_parems_start)))){
+    if(getOption("ddhazard_use_speedglm")){
+      glm_func <- function(fam)
+        suppressWarnings( # Get warning due to convergence failures when maxit = 1
+          static_glm(formula = formula, data = data, max_T = max_T, risk_obj = risk_set,
+                     maxit = 1, family = fam, speedglm = T,
+                     only_coef = TRUE, mf = cbind(X_Y$X, X_Y$fixed_terms)))
+    } else {
+      glm_func <- function(fam)
+        static_glm(formula = formula, data = data, max_T = max_T, risk_obj = risk_set,
+                   epsilon = Inf, family = fam,
+                   speedglm = F,
+                   only_coef = TRUE, mf = cbind(X_Y$X, X_Y$fixed_terms))
+    }
+
     if(model == "logit"){
-      tmp_mod = static_glm(formula = formula, data = data, risk_obj = risk_set,
-                           control = stats::glm.control(epsilon = Inf), family = "binomial")
+      coefs = glm_func("binomial")
 
     } else if(model %in% exp_model_names){
-      tmp_mod = static_glm(formula = formula, data = data, max_T = max_T,
-                           control = stats::glm.control(epsilon = Inf), family = "exponential")
+      coefs = glm_func("exponential")
 
     } else
       stop("Method not implemented to find initial values for '", model, "'. Please, provide intial values for a_0")
 
-    is_fixed <- seq_along(tmp_mod$coefficients) %in% (attr(X_Y$formula, "specials")$ddFixed - 1)
+    is_fixed <-
+      names(coefs) %in% colnames(X_Y$fixed_terms) |
+      grepl("^ddFixed_intercept\\(", names(coefs), perl = TRUE)
 
     if(missing_a_0){
       message("a_0 not supplied. One iteration IWLS of static glm model is used")
-      a_0 = rep(tmp_mod$coefficients[!is_fixed], order)
+      a_0 = rep(coefs[!is_fixed], order)
 
+      if(verbose){
+        message("Starting value for time-varying coeffecients are:")
+        print(a_0)
+      }
     }
+
     if(missing_fixed){
-      control$fixed_parems_start <- tmp_mod$coefficients[is_fixed]
+      control$fixed_parems_start <- coefs[is_fixed]
 
+      if(verbose && length(control$fixed_parems_start) > 0){
+        message("Starting value for fixed coeffecients are:")
+        print(control$fixed_parems_start)
+      }
     }
-
-    rm(tmp_mod)
   }
 
   if(is.vector(Q) && length(Q) == 1)
@@ -253,8 +274,8 @@ ddhazard = function(formula, data,
          " but it has ", ncol(Q_0), " columns")
 
   if(length(a_0) != n_params * order)
-    stop("a_0 does not have the correct length. Its length should be", n_params * order,
-         " but it has length", length(a_0), " ")
+    stop("a_0 does not have the correct length. Its length should be ", n_params * order,
+         " but it has length ", length(a_0), " ")
 
   if(order > 1){
     tmp <- matrix(0., nrow = order * n_params, ncol = order * n_params)
@@ -325,10 +346,13 @@ ddhazard = function(formula, data,
     message("Running EM")
   }
 
+  if(control$permu)
+    eval(get_permu_data_exp(X_Y[1:3], risk_set, weights))
+
   if(!est_fixed_in_E){
     X_Y$X <- t(X_Y$X) # we transpose for performance due to the column-major
-                      # ordering. The logic is that we primary look up indviduals
-                      # (i.e. columns in the tranpose)
+    # ordering. The logic is that we primary look up indviduals
+    # (i.e. columns in the tranpose)
     X_Y$fixed_terms <- t(X_Y$fixed_terms) # same
   } else {
     # We add the firm covariates to the design matrix. Later, we recover the fixed covariates
@@ -337,12 +361,12 @@ ddhazard = function(formula, data,
   }
 
   result <- NA
-  k_vals <- if(control$method == "EKF") seq_len(control$LR_max_try) - 1 else 0
+  k_vals <- seq_len(control$LR_max_try) - 1
   for(k in k_vals){
     tryCatch({
       result <- ddhazard_no_validation(a_0 = a_0, Q_0 = Q_0, F_ = F_, verbose = verbose, Q = Q,
                                        risk_set= risk_set, X_Y = X_Y, order = order, model = model,
-                                       LR = control$LR / control$LR_decrease_fac^(k),
+                                       LR = control$LR * control$LR_decrease_fac^(k),
                                        n_fixed_terms_in_state_vec = ifelse(est_fixed_in_E, n_fixed, 0),
                                        weights = weights,
                                        control)
@@ -351,7 +375,7 @@ ddhazard = function(formula, data,
           !grepl("^ddhazard_fit_cpp estimation error:", e$message))
         stop(e))
 
-    LR <- control$LR / control$LR_decrease_fac^(k)
+    LR <- control$LR * control$LR_decrease_fac^(k)
     if(did_fit <- !(length(result) == 1 && is.na(result)))
       break
   }
@@ -359,8 +383,8 @@ ddhazard = function(formula, data,
   # Check if fit succeeded
   if(!did_fit)
     stop("Failed to estimate model. The following learning rates was tried: ",
-         paste0(control$LR / control$LR_decrease_fac^k_vals, collapse = ", "),
-         ". Try decreasing the learning rate or change the penalty term ridge_eps")
+         paste0(control$LR * control$LR_decrease_fac^k_vals, collapse = ", "),
+         ". Try decreasing the learning rate or change denom_term")
 
   if(k != 0)
     message("Did not succed to fit the model wit a learning rate of ", control$LR,
@@ -377,21 +401,22 @@ ddhazard = function(formula, data,
         X_Y$X <- matrix(nrow = 0, ncol = ncol(X_Y$X))
 
     # We need to change the dimension of various arrays
-    result$V_t_d_s <- result$V_t_d_s[-indicies_fix, , , drop = F]
-    result$V_t_d_s <- result$V_t_d_s[, -indicies_fix, , drop = F]
+    result$V_t_d_s <- result$V_t_d_s[-indicies_fix, -indicies_fix, , drop = F]
 
     result$fixed_effects <- result$a_t_d_s[1, indicies_fix]
     result$a_t_d_s <- result$a_t_d_s[, -indicies_fix, drop = F]
 
-    result$B_s <- result$B_s[-indicies_fix, , , drop = F]
-    result$B_s <- result$B_s[, -indicies_fix, , drop = F]
+    result$B_s <- result$B_s[-indicies_fix, -indicies_fix, , drop = F]
 
-    result$lag_one_cov <- result$lag_one_cov[-indicies_fix, , , drop = F]
-    result$lag_one_cov <- result$lag_one_cov[, -indicies_fix, , drop = F]
+    result$lag_one_cov <- result$lag_one_cov[-indicies_fix, -indicies_fix, , drop = F]
 
-    result$Q  <- result$Q[-indicies_fix, , drop = F]
-    result$Q <- result$Q[, -indicies_fix, drop = F]
+    result$Q  <- result$Q[-indicies_fix, -indicies_fix, drop = F]
+
+    F_ <- F_[-indicies_fix, -indicies_fix, drop = F]
   }
+
+  if(control$permu)
+    eval(get_permu_data_rev_exp(list(), risk_set, weights))
 
   # Set names
   tmp_names = rep(rownames(X_Y$X), order)
@@ -410,13 +435,17 @@ ddhazard = function(formula, data,
 
   if(model == "logit") {
     res <- list(
-    hazard_func =  function(eta, ...){
-      exp_ = exp(eta)
-      exp_/(1 + exp_)
+      hazard_func =  function(eta, ...){
+        exp_ = exp(eta)
+        exp_/(1 + exp_)
       },
       hazard_first_deriv = function(beta, x_, ...){
         exp_ = exp(beta %*% x_)
         x_ * exp_ / (exp_ + 1)^2
+      },
+      var_func = function(eta, ...){
+        exp_ = exp(eta)
+        exp_ / (1 + exp_)^2
       })
 
   }else if(model %in% exp_model_names){
@@ -427,7 +456,8 @@ ddhazard = function(formula, data,
     hazard_first_deriv = function(beta, x_, tstart, tstop, ...){
       eta <- beta %*% x_
       x_ * (tstop - tstart) * exp(eta - exp(eta) * (tstop - tstart))
-    })
+    },
+    var_func = NULL)
   }
 
   structure(c(
@@ -441,7 +471,7 @@ ddhazard = function(formula, data,
     Q = result$Q,
     Q_0 = result$Q_0,
     n_risk = unlist(lapply(risk_set$risk_sets, length)),
-    times = c(min(X_Y$Y[, 1]), risk_set$event_times),
+    times = risk_set$event_times,
     risk_set = if(control$save_risk_set) risk_set else NULL,
     data = if(control$save_data) data else NULL,
     id = if(control$save_data) id else NULL,
@@ -476,10 +506,46 @@ ddhazard_no_validation <- function(a_0, Q_0, F_, verbose, Q,
                    fixed_effect_chunk_size = control$fixed_effect_chunk_size,
                    debug = control$debug,
                    n_threads = control$n_threads,
-                   ridge_eps = control$ridge_eps,
+                   denom_term = control$denom_term,
                    n_fixed_terms_in_state_vec = n_fixed_terms_in_state_vec,
-                   weights = weights)
+                   weights = weights,
+                   use_pinv = control$use_pinv,
+                   criteria = control$criteria,
+                   posterior_version = control$posterior_version,
+                   GMA_max_rep = control$GMA_max_rep,
+                   GMA_NR_eps = control$GMA_NR_eps,
+                   EKF_batch_size = control$EKF_batch_size)
 }
 
-exp_model_names <- c("exp_combined", "exp_bin",
+
+get_F <- function(order, n_params, n_fixed, est_fixed_in_E){
+  if(order == 1){
+    return(diag(rep(1, n_params + n_fixed * est_fixed_in_E)))
+  }
+  else if(order == 2){
+    indicies_cur <- 1:n_params
+    indicies_lag <- n_params + 1:n_params + ifelse(est_fixed_in_E, n_fixed, 0)
+    indicies_fix <- if(est_fixed_in_E) 1:n_fixed + n_params else vector()
+
+    F_ = matrix(NA_real_,
+                nrow = 2 * n_params + n_fixed * est_fixed_in_E,
+                ncol = 2 * n_params + n_fixed * est_fixed_in_E)
+    F_[indicies_cur, indicies_cur] = diag(2, n_params)
+    F_[indicies_lag, indicies_cur] = diag(1, n_params)
+    F_[indicies_cur, indicies_lag] = diag(-1, n_params)
+    F_[indicies_lag, indicies_lag] = 0
+
+    if(length(indicies_fix) > 0){
+      F_[indicies_fix, ] <- 0
+      F_[, indicies_fix] <- 0
+      if(length(indicies_fix) > 1)
+        diag(F_[indicies_fix, indicies_fix]) <- 1 else
+          F_[indicies_fix, indicies_fix] <- 1
+    }
+
+    return(F_)
+  } else stop("Method not implemented for order ", order)
+}
+
+exp_model_names <- c("exp_bin",
                      "exp_clip_time", "exp_clip_time_w_jump")

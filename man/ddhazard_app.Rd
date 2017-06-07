@@ -2,16 +2,24 @@
 % Please edit documentation in R/shiny_app.R
 \name{ddhazard_app}
 \alias{ddhazard_app}
-\title{A Shiny app to illustrates model and method}
+\title{ddhazard demo}
 \usage{
-ddhazard_app()
+ddhazard_app(quietly = F, ...)
+}
+\arguments{
+\item{quietly}{\code{TRUE} if no messages should be printed when the app is run}
+
+\item{...}{Starting values for the shiny app}
 }
 \description{
+\code{ddhazard_app} runs a shiny app with demonstration of models
+}
+\details{
 Runs a shiny app where you try different model specifications on simulated data
 }
 \examples{
 \dontrun{
 dynamichazard::ddhazard_app()
+dynamichazard::ddhazard_app(seed = 1, more_options = TRUE)
 }
 }
-

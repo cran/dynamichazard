@@ -1,10 +1,11 @@
-#' @useDynLib dynamichazard
+#' @useDynLib dynamichazard, .registration = TRUE
 #' @importFrom Rcpp sourceCpp
 #' @importFrom graphics abline axis lines par plot points
-#' @importFrom stats binomial glm model.extract model.matrix poisson predict rexp rnorm runif terms update xtabs quantile var
-#' @importFrom utils capture.output tail
+#' @import stats
+#' @importFrom utils capture.output tail head object.size
 #' @importFrom grDevices col2rgb rgb
 #' @importFrom survival Surv
 #' @importFrom boot boot
 #' @importFrom stringr str_replace_all
+#' @importFrom data.table rbindlist
 NULL

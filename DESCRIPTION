@@ -1,18 +1,18 @@
 Package: dynamichazard
 Type: Package
 Title: Dynamic Hazard Models using State Space Models
-Version: 0.2.0
+Version: 0.3.0
 Authors@R: c(person("Benjamin", "Christoffersen", 
                     email = "boennecd@gmail.com", 
                     role = c("cre", "aut")),
              person("Alan", "Miller", 
-                    role = c("ctb")),
+                    role = c("cph")),
              person("Anthony", "Williams", 
-                    role = c("ctb")),
+                    role = c("cph")),
              person("Boost developers", 
-                    role = c("ctb", "cph")),
+                    role = c("cph")),
              person("R-core", email = "R-core@R-project.org",
-                    role = c("ctb", "cph")))
+                    role = c("cph")))
 Description: Contains functions that lets you fit dynamic hazard models with binary 
   outcomes using state space models. The methods are originally described in  
   Fahrmeir (1992) <doi:10.1080/01621459.1992.10475232> and Fahrmeir (1994) 
@@ -22,23 +22,23 @@ Description: Contains functions that lets you fit dynamic hazard models with bin
 License: GPL-2
 LazyData: TRUE
 LinkingTo: Rcpp, RcppArmadillo
-Imports: parallel, Rcpp (>= 0.12.6), boot, stringr
+Imports: parallel, Rcpp (>= 0.12.6), boot, stringr, data.table
 Depends: R (>= 3.3.2), stats, graphics, utils, survival
-RoxygenNote: 5.0.1
+RoxygenNote: 6.0.1
 Suggests: testthat, knitr, rmarkdown, timereg, captioner, biglm, httr,
-        mgcv, shiny, formatR, R.rsp
+        mgcv, shiny, formatR, R.rsp, speedglm, dichromat, colorspace
 VignetteBuilder: knitr, R.rsp
 BugReports: https://github.com/boennecd/dynamichazard/issues
 SystemRequirements: C++11
 URL: https://github.com/boennecd/dynamichazard
 Encoding: UTF-8
 NeedsCompilation: yes
-Packaged: 2017-01-20 12:57:26 UTC; boennecd
+Packaged: 2017-06-07 16:21:51 UTC; boennecd
 Author: Benjamin Christoffersen [cre, aut],
-  Alan Miller [ctb],
-  Anthony Williams [ctb],
-  Boost developers [ctb, cph],
-  R-core [ctb, cph]
+  Alan Miller [cph],
+  Anthony Williams [cph],
+  Boost developers [cph],
+  R-core [cph]
 Maintainer: Benjamin Christoffersen <boennecd@gmail.com>
 Repository: CRAN
-Date/Publication: 2017-01-20 14:35:18
+Date/Publication: 2017-06-07 20:36:17 UTC

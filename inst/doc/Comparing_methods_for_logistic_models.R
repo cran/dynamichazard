@@ -1,9 +1,9 @@
-## ----setup, include=FALSE------------------------------------------------
+## ----setup, include=FALSE-----------------------------------------------------
 knitr::knit_hooks$set(
   mySettings  = function(before, options, envir){
     if (before && options$mySettings){ 
       par(
-        mar = c(10, 10, 4, 4),
+        mar = c(5, 3, 1, 1),
         bty = "n",
         xaxs = "i",
         pch=16,
@@ -11,11 +11,17 @@ knitr::knit_hooks$set(
         cex.axis = .8 / cex,
         cex.lab = .8 / cex,
         lwd= 1)
-      options(digits = 3, width = 80, warn = -1)
+    } else if(before && options$plot_2x1){
+      par(
+        mfcol = c(2, 1),
+        mar = c(3, 3, 1, 1), 
+        cex = .75)
     }})
 
+options(digits = 3, width = 80, warn = -1)
+
 knitr::opts_chunk$set(echo = TRUE, mySettings=TRUE, fig.height=3.5, fig.width = 6,
-                      warning = F, message = F)
+                      warning = F, message = F, plot_2x1 = FALSE)
 knitr::opts_knit$set(warning = F, message = F)
 
 ## ----echo=FALSE---------------------------------------------------------------
@@ -125,10 +131,7 @@ spline_fit <- gam(
     s(t, bs = "cr", k = 5, by = log(albumin)) + 
     s(t, bs = "cr", k = 5, by = log(protime)) + 
     s(t, bs = "cr", k = 5, by = log(bili)),
-  family = binomial, data = pbc2_big_frame,
-  method = "GCV.Cp") # estimate smoothing parameters with generalized cross 
-                     # validation  
-                  
+  family = binomial, data = pbc2_big_frame)
 
 ## ---- fig.height = 4.5, mySettings=FALSE, fig.cap="Plots of estimated effects in the GAM model. The effective degree of freedom is noted in the parentheses on the y axis and is computed given the number knots and final tuning parameter for spline function. For instance, `s(t,2.43):age` means that the effective degrees of freedom for `age` is `2.43`"----
 plot(spline_fit, scale = 0, page = 1, rug = F)
@@ -158,7 +161,7 @@ library(dynamichazard)
 dd_fit <- ddhazard(Surv(tstart, tstop, death == 2) ~ age + edema +
                         log(albumin) + log(protime) + log(bili), pbc2,
                    id = pbc2$id, by = 100, max_T = 3600, 
-                   Q_0 = diag(rep(10, 6)), Q = diag(rep(0.001, 6)))
+                   Q_0 = diag(rep(100000, 6)), Q = diag(rep(0.01, 6)))
 
 plot(dd_fit)
 
@@ -166,9 +169,8 @@ plot(dd_fit)
 dd_fit <- ddhazard(Surv(tstart, tstop, death == 2) ~ age + edema +
                         log(albumin) + log(protime) + log(bili), pbc2,
                    id = pbc2$id, by = 100, max_T = 3600,
-                   a_0 = glm_fit_big$coefficients,
                    control = list(NR_eps = 0.1), # <-- tolerance in correction step
-                   Q_0 = diag(rep(1, 6)),        # <-- decreased Q_0
+                   Q_0 = diag(rep(1, 6)),
                    Q = diag(rep(0.001, 6)))
 
 # Plot result
@@ -213,20 +215,55 @@ dd_fit_UKF <- ddhazard(
 
 plot(dd_fit_UKF)
 
+## ---- echo = FALSE------------------------------------------------------------
+set.seed(7686280) # <-- Data is permuated so we set a seed
+
+## -----------------------------------------------------------------------------
+dd_fit_EKF <- 
+  ddhazard(Surv(tstart, tstop, death == 2) ~ age + edema +
+             log(albumin) + log(protime) + log(bili), pbc2,
+           id = pbc2$id, by = 100, max_T = 3600,
+           Q_0 = diag(rep(100000, 6)), Q = diag(rep(0.01, 6)))
+
+dd_fit_SMA <- 
+  ddhazard(Surv(tstart, tstop, death == 2) ~ age + edema +
+             log(albumin) + log(protime) + log(bili), pbc2,
+           id = pbc2$id, by = 100, max_T = 3600,
+           
+           control = list(method = "SMA"), # change estimation method 
+                                                   # from default
+           Q_0 = diag(rep(100000, 6)), Q = diag(rep(0.01, 6)))
+
+## ---- eval = FALSE------------------------------------------------------------
+#  par(mfcol = c(2, 3))
+#  for(i in 1:6){
+#    plot(dd_fit_EKF, cov_index = i, col = "black")
+#    plot(dd_fit_SMA, cov_index = i, col = "red", add = TRUE)
+#  }
+
+## ---- echo=FALSE--------------------------------------------------------------
+par_old <- par(no.readonly = T)
+par(mfcol = c(2, 3))
+par(cex = par_old$cex * .85, mar = par_old$mar * 1.33)
+for(i in 1:6){
+  plot(dd_fit_EKF, cov_index = i, col = "black")
+  plot(dd_fit_SMA, cov_index = i, col = "red", add = TRUE)
+}
+
 ## ---- warning=FALSE-----------------------------------------------------------
 dd_fit <- ddhazard(
   Surv(tstart, tstop, death == 2) ~ ddFixed(1) + 
-    ddFixed(age) + ddFixed(log(albumin)) + edema +ddFixed(log(protime)) + log(bili), 
+    ddFixed(age) + ddFixed(log(albumin)) + edema + ddFixed(log(protime)) + log(bili), 
   pbc2, id = pbc2$id, by = 100, max_T = 3600, 
-  Q_0 = diag(rep(1, 2)), Q = diag(rep(0.0001, 2)), control = list(eps = 0.02))
+  Q_0 = diag(rep(100000, 2)), Q = diag(rep(0.001, 2)))
 
-## ---- fig.height = 3.5, mySettings=FALSE--------------------------------------
+## ---- fig.height = 5, mySettings=FALSE, plot_2x1 = TRUE-----------------------
 plot(dd_fit)
 
-## ---- fig.height = 6----------------------------------------------------------
+## -----------------------------------------------------------------------------
 dd_fit$fixed_effects
 
-## ---- fig.height = 3.5, mySettings=FALSE--------------------------------------
+## ---- fig.height = 5, mySettings=FALSE, plot_2x1 = TRUE-----------------------
 dd_fit <- ddhazard(
   Surv(tstart, tstop, death == 2) ~ ddFixed(1) + 
     ddFixed(age) + ddFixed(log(albumin)) + edema +ddFixed(log(protime)) + log(bili), 
@@ -236,17 +273,37 @@ dd_fit <- ddhazard(
 
 plot(dd_fit)
 
+## ---- echo = FALSE------------------------------------------------------------
+set.seed(3434439) # <-- Data is permuated so we set a seed
+
 ## -----------------------------------------------------------------------------
-dd_fit <- ddhazard(Surv(tstart, tstop, death == 2) ~ 
+# Define formula
+form <- Surv(tstart, tstop, death == 2) ~ 
                      ddFixed(1) + ddFixed(age) + 
                      ddFixed(edema) + ddFixed(log(albumin)) + 
-                     ddFixed(log(protime)) + log(bili), pbc2,
-                   id = pbc2$id, by = 100, max_T = 3600,
-                   order = 2,             # <-- second order
-                   Q_0 = diag(c(10, 10)), # <-- needs more elements
-                   Q = matrix(0.001))
+                     ddFixed(log(protime)) + log(bili)
 
-plot(dd_fit)
+# Fit models
+dd_fit_EKF <- 
+  ddhazard(form, pbc2,
+           id = pbc2$id, by = 100, max_T = 3600,
+           order = 2,            # <-- second order
+           Q_0 = diag(10000, 2), # <-- needs more elements
+           Q = 0.001)
 
-dd_fit$fixed_effects
+dd_fit_post <- 
+  ddhazard(form, pbc2,
+           id = pbc2$id, by = 100, max_T = 3600, 
+           order = 2,
+           Q_0 = diag(10000, 2), Q = 0.001, 
+           control = list(method = "SMA"))
+
+## -----------------------------------------------------------------------------
+rbind(
+  "EKF" = dd_fit_EKF$fixed_effects,
+  "Posterior approximation" = dd_fit_post$fixed_effects)
+
+## -----------------------------------------------------------------------------
+plot(dd_fit_EKF)
+plot(dd_fit_post, col = "red", add = T)
 

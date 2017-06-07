@@ -1,37 +1,65 @@
 BLAS_CXXFLAGS_USE =
 USE_OPEN_BLAS =
 
-ifneq ($(wildcard c:/OpenBLAS),)
-BLAS_CXXFLAGS_USE = -I"c:/OpenBLAS/include" -lopenblas
-USE_OPEN_BLAS = -D USE_OPEN_BLAS
-BLAS_LIBS_USE = C:/OpenBLAS/lib/libopenblas.a
+OPEN_BLAS_DIR = C:/OpenBLAS/
+ifneq "$(wildcard $(OPEN_BLAS_DIR))" ""
+	BLAS_CXXFLAGS_USE = -I"C:/OpenBLAS/include" -lopenblas
+	USE_OPEN_BLAS = -D USE_OPEN_BLAS
+	BLAS_LIBS_USE = c:/OpenBLAS/lib/libopenblas.a
 else
-BLAS_LIBS_USE = $(BLAS_LIBS)
+	BLAS_LIBS_USE = $(BLAS_LIBS)
 endif
 
 SOURCES_C = stats/lm.c
-SOURCES_CPP = Cdqrls_wrapper.cpp RcppExports.cpp bigglm_wrapper.cpp ddhazard_fit.cpp dist_families.cpp loglike.cpp risk_obj.cpp thread_pool.cpp
-SOURCES_F = biglm/boundedQRf.f
+SOURCES_CPP = LAPACK_BLAS_wrapper.cpp arma_utils.cpp Cdqrls_wrapper.cpp RcppExports.cpp bigglm_wrapper.cpp ddhazard_fit.cpp loglike.cpp risk_obj.cpp thread_pool.cpp ddhazard_EKF_solver.cpp ddhazard_UKF_solver.cpp ddhazard_SMA_solver.cpp ddhazard_GMA_solver.cpp
+SOURCES_F = biglm/boundedQRf.f dchur.f
 CXX_STD = CXX11
 OBJECTS =$(SOURCES_CPP:.cpp=.o)  $(SOURCES_C:.c=.o) $(SOURCES_F:.f=.o)
 
 ## PKG_CFLAGS & PKG_CXXFLAGS C and C++ flags
 PKG_CXXFLAGS = $(BLAS_CXXFLAGS_USE) $(USE_OPEN_BLAS) $(SHLIB_PTHREAD_FLAGS)
 ## PKG_LIBS: Linker flags
-PKG_LIBS = $(FLIBS) $(BLAS_LIBS_USE) $(LAPACK_LIBS) $(SHLIB_PTHREAD_FLAGS) $(USE_OPEN_BLAS)
+PKG_LIBS =  $(LAPACK_LIBS) $(BLAS_CXXFLAGS_USE) $(FLIBS) $(SHLIB_PTHREAD_FLAGS) $(USE_OPEN_BLAS)
 
 ifeq "$(WIN)" "64"
-PKG_LIBS = $(FLIBS) $(BLAS_LIBS_USE) $(LAPACK_LIBS) $(SHLIB_PTHREAD_FLAGS) $(USE_OPEN_BLAS) -D ARMA_64BIT_WORD
+PKG_LIBS = $(LAPACK_LIBS) $(BLAS_LIBS_USE) $(FLIBS) $(SHLIB_PTHREAD_FLAGS) $(USE_OPEN_BLAS) -D ARMA_64BIT_WORD
 else
-PKG_LIBS = $(FLIBS) $(BLAS_LIBS_USE) $(LAPACK_LIBS) $(SHLIB_PTHREAD_FLAGS) $(USE_OPEN_BLAS)
+PKG_LIBS = $(LAPACK_LIBS) $(BLAS_LIBS_USE) $(FLIBS) $(SHLIB_PTHREAD_FLAGS) $(USE_OPEN_BLAS)
 endif
 
+DD_DEPS = arma_n_rcpp.h ddhazard_problem_data.h ddhazard.h
+BIGGLM_DEPS = arma_n_rcpp.h bigglm_wrapper.h
+
+ifeq "$(wildcard $(OPEN_BLAS_DIR))" ""
 all: $(SHLIB)
+		@echo "Did not find $(OPEN_BLAS_DIR) and will compile with BLAS used by R"
+else
+all: $(SHLIB)
+		@echo "Found $(OPEN_BLAS_DIR) and will compile with openBlas"
+endif
 
-$(SOURCES_CPP:.cpp=.o): dynamichazard.h
+$(SHLIB): $(OBJECTS)
 
-ddhazard_fit.o: ddhazard_fit.cpp thread_pool.h
+loglike.o: arma_n_rcpp.h loglike.cpp
 
-thread_pool.o: thread_pool.cpp thread_pool.h
+Cdqrls_wrapper.o: $(BIGGLM_DEPS) Cdqrls_wrapper.cpp
 
-bigglm_wrapper.o Cdqrls_wrapper.o: dist_families.cpp
+bigglm_wrapper.o: $(BIGGLM_DEPS) bigglm_wrapper.cpp
+
+ddhazard.o: $(DD_DEPS) $(BIGGLM_DEPS) thread_pool.h ddhazard.cpp
+
+ddhazard_EKF_solver.o: $(DD_DEPS) exp_model_funcs.h thread_pool.h ddhazard_EKF_solver.cpp
+
+ddhazard_UKF_solver.o: $(DD_DEPS) exp_model_funcs.h ddhazard_UKF_solver.cpp
+
+ddhazard_posterior_approx_solver.o: $(DD_DEPS) exp_model_funcs.h ddhazard_posterior_approx_solver.cpp
+
+## I had issues like those posted here with R-devel R-3.5.0:
+## 	https://code.launchpad.net/~fluidity-core/fluidity/gmsh-on-sphere/+merge/99395/comments/216834
+## The build output log was:
+## 	d:/Compiler/gcc-4.9.3/mingw_64/bin/gfortran -m64     -pedantic -fbounds-check -O2  -mtune=core2 -c dchur.f -o dchur.o
+## And it yielded the following error:
+##	At line 1 of file dchur.f
+##	Fortran runtime error: Actual string length is shorter than the declared one for dummy argument 'uplo' (0/1)
+dchur.o:
+	$(F77) $(filter-out -fbounds-check,$(ALL_FFLAGS)) -c dchur.f -o dchur.o

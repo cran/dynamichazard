@@ -5,11 +5,15 @@ if(interactive()){
   if(grepl("testthat$", getwd()))
     source("../../R/test_utils.R") else
       source("./R/test_utils.R")
+
+  get_permu_data_exp <-  with(environment(ddhazard), get_permu_data_exp)
+  get_permu_data_rev_exp <- with(environment(ddhazard), get_permu_data_rev_exp)
 }
 
 # Had issues with cran buil. Thus, these lines
 test_name <- "design_mat_..."
 cat("\nRunning", test_name, "\n")
+options(ddhazard_use_speedglm = F)
 
 get_design_matrix <- function(...) environment(ddhazard)$get_design_matrix(...)
 
@@ -47,24 +51,29 @@ test_that("Fixed terms works as expected",{
 })
 
 test_that("Different forms of fixing the intercept gives same results",{
+  set.seed(11111)
+  sims = as.data.frame(test_sim_func_exp(n_series = 5e2, n_vars = 3, beta_start = 1,
+                                         intercept_start = - 5, sds = c(sqrt(.1), rep(1, 3)),
+                                         x_range = 1, x_mean = .5)$res)
+
   for(m in c("logit", exp_model_names)){
     m1 <- suppressWarnings(suppressMessages(
       ddhazard(survival::Surv(tstart, tstop, event) ~ ddFixed(1) + x1 + x2,
-               model = m, by = 2.5, data = sims, max_T = 10,
-               Q_0 = diag(1, 2), Q = diag(.1, 2),
-               control = list(ridge_eps = .01, eps = .1,
+               model = m, by = 1, data = sims, max_T = 10,
+               Q_0 = diag(1, 2), Q = diag(.01, 2),
+               control = list(eps = .1, method = "GMA",
                               fixed_terms_method = "M_step"))))
     m2 <- suppressWarnings(suppressMessages(
       ddhazard(survival::Surv(tstart, tstop, event) ~ -1 + ddFixed(1) + x1 + x2,
-               model = m, by = 2.5, data = sims, max_T = 10,
-               Q_0 = diag(1, 2), Q = diag(.1, 2),
-               control = list(ridge_eps = .01, eps = .1,
+               model = m, by = 1, data = sims, max_T = 10,
+               Q_0 = diag(1, 2), Q = diag(.01, 2),
+               control = list(eps = .1, method = "GMA",
                               fixed_terms_method = "M_step"))))
     m3 <- suppressWarnings(suppressMessages(
       ddhazard(survival::Surv(tstart, tstop, event) ~ -1 + ddFixed(rep(1, length(x1))) + x1 + x2,
-               model = m, by = 2.5, data = sims, max_T = 10,
-               Q_0 = diag(1, 2), Q = diag(.1, 2),
-               control = list(ridge_eps = .01, eps = .1,
+               model = m, by = 1, data = sims, max_T = 10,
+               Q_0 = diag(1, 2), Q = diag(.01, 2),
+               control = list(eps = .1, method = "GMA",
                               fixed_terms_method = "M_step"))))
 
     expect_equal(m1$state_vecs, m2$state_vecs, tolerance = 1e-5)
@@ -238,7 +247,6 @@ for(do_truncate in c(F, T)){
   }
 }
 
-
 #######
 # Further test for design mat
 
@@ -251,14 +259,13 @@ design_no_Y <- do.call(get_design_matrix, arg_list)
 
 test_that("get_design_matrix with versus without response", {
   expect_equal(design$X, design_no_Y$X)
-  expect_false(design$formula == design_no_Y$formula)
   expect_null(design_no_Y$Y)
 })
 
 arg_list$data <- sims[, !colnames(sims) %in% c("tstart", "tstop", "event")]
 
 tryCatch({
-  test_that("calling get_design_matrix without response and also no response in data",{
+  test_that("calling get_design_matrix without response and also no response in data works and give the same as calling with response",{
     design_no_Y_also_in_data <- do.call(get_design_matrix, arg_list)
 
     expect_equal(design_no_Y_also_in_data$X, design_no_Y$X)
@@ -268,6 +275,70 @@ tryCatch({
 }, error = function(...){
   test_that("calling get_design_matrix without response and also no response in data",
             expect_true(FALSE))
+})
+
+test_that("dimension are correct with get_design_matrix with different combinations of fixed or not fixed factor",{
+  #####
+  # Only time varying w/ no intercept
+  dsng_mat <- get_design_matrix(
+    Surv(tstart, tstop, event) ~
+      -1 + as.factor(x1 > .5) + as.factor(x2 > .5) + as.factor(x3 > .5), sims)
+
+  expect_equal(ncol(dsng_mat$fixed_terms), 0)
+  expect_equal(ncol(dsng_mat$X), 4)
+  expect_equal(colnames(dsng_mat$X),
+               c("as.factor(x1 > 0.5)FALSE", "as.factor(x1 > 0.5)TRUE",
+                 "as.factor(x2 > 0.5)TRUE", "as.factor(x3 > 0.5)TRUE"))
+
+  #####
+  # Only time varying w/ intercept
+  dsng_mat <- get_design_matrix(
+    Surv(tstart, tstop, event) ~
+      as.factor(x1 > .5) + as.factor(x2 > .5) + as.factor(x3 > .5), sims)
+
+  expect_equal(ncol(dsng_mat$fixed_terms), 0)
+  expect_equal(ncol(dsng_mat$X), 4)
+  expect_equal(colnames(dsng_mat$X),
+               c("(Intercept)", "as.factor(x1 > 0.5)TRUE",
+                 "as.factor(x2 > 0.5)TRUE", "as.factor(x3 > 0.5)TRUE"))
+
+  #####
+  # No intercept w/ mixed fixed and time-varying effects
+  dsng_mat <- get_design_matrix(
+    Surv(tstart, tstop, event) ~
+      -1 + ddFixed(as.factor(x1 > .5)) + as.factor(x2 > .5) + as.factor(x3 > .5), sims)
+
+  expect_equal(ncol(dsng_mat$fixed_terms), 2)
+  expect_equal(colnames(dsng_mat$fixed_terms),
+               c("ddFixed(as.factor(x1 > 0.5))FALSE", "ddFixed(as.factor(x1 > 0.5))TRUE"))
+  expect_equal(ncol(dsng_mat$X), 2)
+  expect_equal(colnames(dsng_mat$X),
+               c("as.factor(x2 > 0.5)TRUE", "as.factor(x3 > 0.5)TRUE"))
+
+  #####
+  # Fixed intercept w/ mixed fixed and time-varying effects
+  dsng_mat <- get_design_matrix(
+    Surv(tstart, tstop, event) ~
+      ddFixed(1) + ddFixed(as.factor(x1 > .5)) + as.factor(x2 > .5) + as.factor(x3 > .5), sims)
+  expect_equal(ncol(dsng_mat$fixed_terms), 2)
+  expect_equal(colnames(dsng_mat$fixed_terms),
+               c("ddFixed((Intercept))", "ddFixed(as.factor(x1 > 0.5))TRUE"))
+  expect_equal(ncol(dsng_mat$X), 2)
+  expect_equal(colnames(dsng_mat$X),
+               c("as.factor(x2 > 0.5)TRUE", "as.factor(x3 > 0.5)TRUE"))
+
+  # all these formulas should give the same
+  for(frm in list(
+    Surv(tstart, tstop, event) ~ -1 + ddFixed(1) + ddFixed(as.factor(x1 > .5)) + as.factor(x2 > .5) + as.factor(x3 > .5),
+    Surv(tstart, tstop, event) ~ ddFixed(rep(1, nrow(data))) + ddFixed(as.factor(x1 > .5)) + as.factor(x2 > .5) + as.factor(x3 > .5),
+    Surv(tstart, tstop, event) ~ -1 + ddFixed(rep(1, nrow(data))) + ddFixed(as.factor(x1 > .5)) + as.factor(x2 > .5) + as.factor(x3 > .5),
+    Surv(tstart, tstop, event) ~ ddFixed_intercept(nrow(data)) + ddFixed(as.factor(x1 > .5)) + as.factor(x2 > .5) + as.factor(x3 > .5),
+    Surv(tstart, tstop, event) ~ -1 + ddFixed_intercept(nrow(data)) + ddFixed(as.factor(x1 > .5)) + as.factor(x2 > .5) + as.factor(x3 > .5))){
+    new_dsng_mat <- get_design_matrix(frm, sims)
+
+    expect_equal(dsng_mat$X, new_dsng_mat$X)
+    expect_equal(dsng_mat$fixed_terms, new_dsng_mat$fixed_terms)
+  }
 })
 
 # Test that removal of intercepts works as in lm
@@ -300,7 +371,7 @@ test_that("is_for_discrete_model logic work",{
       2, 0, 1, 1,
 
       # Id 3:
-      #   same as id 1 but with no event
+      #   same as id 1 but with no event. Hence not in
       3, 0, .5, 0,
 
       # Id 4:
@@ -367,7 +438,7 @@ test_that("is_for_discrete_model logic work",{
                  -1, -1, -1, -1, -1,
                  1, -1))
 
-  expect_true(setequal(get_risk_obj_discrete$risk_sets[[1]], c(1:6, 8)))
+  expect_true(setequal(get_risk_obj_discrete$risk_sets[[1]], c(c(1, 2, 4, 5, 6), 8)))
   expect_true(setequal(get_risk_obj_discrete$risk_sets[[2]], c(5:6, 8, 11, 13, 15, 16, 17)))
   expect_true(setequal(get_risk_obj_discrete$risk_sets[[3]], c(5:6, 12, 14, 17)))
 
@@ -384,6 +455,182 @@ test_that("is_for_discrete_model logic work",{
   expect_true(setequal(get_risk_obj_cont$risk_sets[[2]], c(5:6, 8, 9, 11, 12, 13, 14, 15, 16, 17)))
   expect_true(setequal(get_risk_obj_cont$risk_sets[[3]], c(5:6, 12, 14, 17)))
 })
+
+#####
+# By hand test of risk_obj
+
+# This is a useful illustration (I find)
+plot_exp <- expression({
+  id_unique <- unique(id)
+
+  ylim <- c(1, length(id_unique))
+  xlim <- range(tstart, tstop)
+  plot(xlim, ylim + c(-.5, .5), type = "n", ylab = "", xlab = "time")
+  abline(v = 0:ceiling(xlim[2]), lty = 2)
+
+  for(y in 1:ylim[2]){
+    i <- id_unique[y]
+    is_in <- which(id == i)
+    n <- length(is_in)
+
+    tsta <- tstart[is_in]
+    tsto <- tstop[is_in]
+
+    pch <- ifelse(event[is_in] == 1, rep(16,  n), rep(4, n))
+
+    for(u in 1:n){
+      lines(c(tsta[u], tsto[u]), rep(y, 2))
+    }
+    points(tsto, rep(y, n), pch = pch)
+    text(tsta - .05, rep(y + .5, n), labels = is_in)
+  }
+})
+
+# The test data
+test_dat <- data.frame(matrix(
+  byrow = T, ncol = 4,
+  dimnames = list(NULL, c("tstart", "tstop", "event", "id")), c(
+    0,   1, 0, 1,
+    1,   2, 1, 1, # 2
+    0,   1, 0, 2,
+    1,   2, 0, 2,
+
+    0,   2, 0, 3,
+    0,   2, 1, 4, # 6
+
+    1,   2, 0, 5,
+    1,   2, 1, 6, # 8
+
+    0, 1.5, 1, 7, # 9
+    0, 1.5, 0, 8,
+
+    0,  .5, 0,  9,
+    0,  .5, 1, 10, # 12
+
+    .25, .5, 0, 11,
+    .25, .5, 1, 12,
+
+     .5, 1.3, 0, 13,
+    1.3, 1.5, 0, 13,
+     .5, 1.3, 0, 14, # 17
+    1.3, 1.5, 1, 14,
+
+      0, 1.1, 0, 15,
+    1.3, 1.6, 1, 15,
+      0, 1.1, 0, 16,
+    1.3, 1.6, 0, 16
+  )))
+
+## Comment back to get plot
+# with(test_dat, eval(plot_exp))
+
+risk_obj <- with(test_dat, get_risk_obj(
+  Y = Surv(tstart, tstop, event),
+  by = 1, max_T = 2, id = id, is_for_discrete_model = T))
+
+test_that("Each risk set contain the expect indvidual with the correct rows", {
+  risk_sets_by_ids <- lapply(risk_obj$risk_sets, function(x) test_dat$id[x])
+  expect_true(setequal(risk_sets_by_ids[[1]], c(1:4, 7, 8, 10, 15, 16)))
+  expect_true(setequal(sort(risk_sets_by_ids[[2]]), c(1:7, 14, 15)))
+
+  expect_equal(sort(risk_obj$risk_sets[[1]]), c(1, 3, 5, 6, 9, 10, 12, 19, 21))
+  expect_equal(sort(risk_obj$risk_sets[[2]]), c(2, 4, 5, 6, 7, 8, 9, 17, 19))
+})
+
+test_that("Individuals are markeds as events in the correct bins", {
+  is_ev <- c(2, 6, 8, 9, 12, 17, 19)
+
+  expect_true(all(risk_obj$is_event_in[-is_ev] == -1))
+  expect_equal(risk_obj$is_event_in[is_ev], c(1, 1, 1, 1, 0, 1, 1))
+})
+
+#####
+# Test randomize
+
+set.seed(875080)
+X_Y <- get_design_matrix(
+  Surv(tstart, tstop, death == 2) ~ ddFixed(age) + albumin, pbc2)
+risk_obj_org <- risk_obj <- get_risk_obj(X_Y$Y, 100, max_T = 3600, pbc2$id)
+X_Y[1:3] <- lapply(X_Y[1:3], data.frame)
+X_Y_org <- X_Y
+
+w_org <- w <- sample(1:3, replace = T, nrow(pbc2))
+
+eval(get_permu_data_exp(X_Y[1:3], risk_obj, w))
+
+
+got_plyr <- suppressWarnings(require(plyr, quietly = T))
+test_that("Permutating gives the data frame and risk set permutated", {
+  for(i in 1:3){
+    expect_true(any(as.matrix(X_Y[[i]]) != as.matrix(X_Y_org[[i]])))
+    expect_equal(nrow(X_Y[[i]]), nrow(X_Y_org[[i]]))
+    if(got_plyr){
+      expect_equal(nrow(suppressMessages(match_df(X_Y_org[[i]], X_Y[[i]]))), nrow(X_Y_org[[i]]))
+    }
+  }
+
+  expect_true(setequal(w_org, w))
+  expect_true(any(w_org != w))
+
+  expect_equal(length(risk_obj$risk_sets), length(risk_obj_org$risk_sets))
+  for(i in seq_along(risk_obj$risk_sets)){
+    r1 <- risk_obj$risk_sets[[i]]
+    r2 <- risk_obj_org$risk_sets[[i]]
+
+    expect_true(!is.unsorted(risk_obj$risk_sets[[i]]))
+    expect_true(any(r1 != r2))
+    expect_equal(length(r1), length(r2))
+  }
+
+  expect_true(any(risk_obj$is_event_in != risk_obj_org$is_event_in))
+  expect_true(setequal(risk_obj$is_event_in, risk_obj_org$is_event_in))
+})
+
+eval(get_permu_data_rev_exp(X_Y[1:3], risk_obj, w))
+
+test_that("Reverse permutating the data frame and the initial values", {
+  for(i in 1:3)
+    expect_equal(as.matrix(X_Y[[i]]), as.matrix(X_Y_org[[i]]))
+
+  for(i in seq_along(risk_obj$risk_sets)){
+    r1 <- risk_obj$risk_sets[[i]]
+    r2 <- risk_obj_org$risk_sets[[i]]
+
+    expect_equal(r1, r2)
+  }
+
+  expect_equal(w, w_org)
+
+  expect_equal(risk_obj$is_event_in, risk_obj_org$is_event_in)
+})
+
+#####
+# By hand test of risk_obj with parallal
+
+test_that("Parallel and non-parallel version gives the same for get_risk_set", {
+  set.seed(4296745)
+  s <-
+    test_sim_func_logit(
+      n_series = 5000, n_vars = 1, beta_start = 1,
+      intercept_start = - 5, sds = c(sqrt(.1), rep(1, 1)),
+      x_range = 1, x_mean = .5)$res
+
+  p1 <- with(s, get_risk_obj(
+    Y = Surv(tstart, tstop, event),
+    by = 1, max_T = 10, id = id, is_for_discrete_model = T))
+
+  p2 <- with(s, get_risk_obj(
+    Y = Surv(tstart, tstop, event),
+    by = 1, max_T = 10, id = id, is_for_discrete_model = T,
+    n_threads = 2, min_chunk = 1000))
+
+  for(i in 1:10)
+    expect_true(setequal(p1$risk_sets[[i]],
+                         p2$risk_sets[[i]]))
+
+  expect_equal(p1[-1], p2[-1])
+})
+
 
 
 

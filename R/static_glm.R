@@ -34,8 +34,9 @@ get_survival_case_weights_and_data = function(
   c_outcome = "Y",
   c_weights = "weights",
   c_end_t = "t"){
-  X_Y = get_design_matrix(formula, data)
+  X_Y = get_design_matrix(formula, data, predictors = F)
   formula <- X_Y$formula
+  attr(data, "class") <- c("data.table", attr(data, "class"))
 
   if(missing(init_weights))
     init_weights = rep(1, nrow(data))
@@ -63,7 +64,7 @@ get_survival_case_weights_and_data = function(
 
   if(compute_risk_obj){
     if(missing(id)){
-      warning("You did not parse and ID argument. I do not hink this is what you want ...")
+      warning("You did not parse and ID argument. This can affact result for discrete models with time-coefficients effects")
       id = 1:nrow(data)
     }
 
@@ -71,29 +72,43 @@ get_survival_case_weights_and_data = function(
       Y = X_Y$Y, by = by,
       max_T = ifelse(missing(max_T), max(X_Y$Y[X_Y$Y[, 3] == 1, 2]), max_T),
       id = id, is_for_discrete_model = is_for_discrete_model)
+
+    risk_obj$event_times <- tail(risk_obj$event_times, -1)
   }
 
   if(use_weights){
     new_weights = rep(0, nrow(data))
-    new_case_rows = data.frame()
+    new_case_rows = list()
 
     for(i in seq_along(risk_obj$risk_sets)){
       time_ = risk_obj$event_times[i]
       r_set = risk_obj$risk_sets[[i]]
 
       is_case = risk_obj$is_event_in[r_set] == i - 1
+      r_set_is_case <- r_set[is_case]
+      r_set_not_case <- r_set[!is_case]
 
-      new_case_rows = rbind(new_case_rows, cbind(
-        Y = rep(1, sum(is_case)), data[r_set[is_case], ], weights = init_weights[r_set[is_case]]))
+      new_case_rows <- c(
+        new_case_rows, list(c(
+          list(Y = rep(1, sum(is_case))),
+          data[r_set_is_case],
+          list(weights = init_weights[r_set_is_case]))))
 
-      new_weights[r_set[!is_case]] = new_weights[r_set[!is_case]] + init_weights[r_set[!is_case]]
+      new_weights[r_set_not_case] = new_weights[r_set_not_case] + init_weights[r_set_not_case]
     }
 
-    X = cbind(rep(0, nrow(data)), data, new_weights)[new_weights > 0, ]
-    colnames(X)[c(1, ncol(X))] <- c(c_outcome, c_weights)
-    X = rbind(X, new_case_rows)
+    do_keep <- new_weights > 0
+    n_keep <- sum(do_keep)
+    do_keep <- which(do_keep)
+    X = c(
+      list(Y = rep(0, n_keep)),
+      data[do_keep],
+      list(weights = new_weights[do_keep]))
+    X <- rbindlist(c(list(X), new_case_rows))
+    attr(X, "colnames")[c(1, ncol(X))] <- c(c_outcome, c_weights)
+    class(X) <- "data.frame"
 
-  }else {
+  } else {
     n_rows_final <- sum(unlist(lapply(risk_obj$risk_sets, length)))
     X <- data.frame(matrix(NA, nrow = n_rows_final, ncol = 3 + ncol(data),
                            dimnames = list(NULL, c(colnames(data),
@@ -114,27 +129,48 @@ get_survival_case_weights_and_data = function(
       j <- j + n_risk
     }
 
+    for(i in which(sapply(data, is.factor)))
+      X[[i]] <- factor(levels(data[[i]])[X[[i]]], levels = levels(data[[i]]))
   }
 
-  list(X = data.frame(X), formula = formula)
+  list(X = X, formula = formula)
 }
 
 
 #' Function to make a static glm fit
 #' @inheritParams get_survival_case_weights_and_data
+#' @param ... arguments passed to \code{\link{glm}} or \code{\link[speedglm]{speedglm}}. If \code{only_coef = TRUE} then the arguments are passed to \code{\link{glm.control}} if \code{\link{glm}} is used
 #' @param family \code{"logit"} or \code{"exponential"} for the static equivalent model of \code{\link{ddhazard}}
 #' @param model \code{TRUE} if you want to save the design matrix used in \code{\link{glm}}
 #' @param weights weights if a skewed sample or similar is used
-#' @param ... arguments passed to \code{\link{glm}}
+#' @param speedglm \code{TRUE} if \code{speedglm} should be used.
+#' @param only_coef \code{TRUE} if only coefficients should be returned. This will only call the \code{speedglm.wfit} or \code{\link{glm.fit}} which will be faster.
+#' @param mf model frame for regression. Needed when \code{only_coef = TRUE}
 #'
 #' @details
 #' Method to fit a static model corresponding to a \code{\link{ddhazard}} fit. The method uses weights to ease the memory requirements. See \code{\link{get_survival_case_weights_and_data}} for details on weights
 #'
 #' @return
-#' The returned list from the \code{\link{glm}} call
+#' The returned list from the \code{\link{glm}} call or just coefficients depending on the value of \code{only_coef}
 #'
 #' @export
-static_glm = function(formula, data, by, max_T, id, family = "logit", model = F, weights, risk_obj = NULL, ...){
+static_glm = function(
+  formula, data, by, max_T, ..., id, family = "logit", model = F, weights, risk_obj = NULL,
+  speedglm = F, only_coef = FALSE, mf){
+  if(only_coef && missing(mf))
+    stop("mf must be supplied when only_coef = TRUE")
+
+  if(!missing(mf) && nrow(mf) != nrow(data))
+    stop("data and mf must have the same number of rows")
+
+  if(only_coef){
+    # We mark the row numbers as some may be removed and the order may be
+    # changed
+    col_for_row_n <- ncol(data) + 1
+    data[[col_for_row_n]] <- 1:nrow(data)
+    col_for_row_n <- colnames(data)[col_for_row_n]
+  }
+
   if(family %in% c("binomial", "logit")){
     family <- binomial()
 
@@ -146,13 +182,14 @@ static_glm = function(formula, data, by, max_T, id, family = "logit", model = F,
     X <- tmp$X
     rm(tmp)
 
-    formula <- stats::formula(terms(formula, data = data))
-
     data <- X
-    formula = update(formula, Y ~ ., data = data)
+    formula <- update(formula, Y ~ ., data = data)
+    formula <- terms(formula, data = data, specials = ddfixed_specials)
+    class(formula) <- c("ddformula", class(formula))
 
   } else if(family == "exponential"){
     family <- poisson()
+    # TODO: can be quicker when we just want the outcome
     X_Y = get_design_matrix(formula, data)
     X_Y$X <- X_Y$X[, -1] # remove the intercept
 
@@ -162,19 +199,52 @@ static_glm = function(formula, data, by, max_T, id, family = "logit", model = F,
     data <- data[is_before_max_T, ]
     X_Y$Y <- X_Y$Y[is_before_max_T, ]
 
-    X <- cbind(data,
-               Y = X_Y$Y[, 3] & (X_Y$Y[, 2] <= max_T),
+    X <- cbind(Y = X_Y$Y[, 3] & (X_Y$Y[, 2] <= max_T),
+               data,
                log_delta_time = log(pmin(X_Y$Y[, 2], max_T) - X_Y$Y[, 1]),
                weights = rep(1, nrow(data)))
 
-    formula <- stats::formula(terms(formula, data = data))
-
     data <- X
-    formula = update(formula, Y ~ . + offset(log_delta_time), data = data)
+    formula <- update(formula, Y ~ . + offset(log_delta_time), data = data)
+    formula <- terms(formula, data, specials = ddfixed_specials)
+    class(formula) <- c("ddformula", class(formula))
 
   } else
     stop("family '", family, "' not implemented in static_glm")
 
-  environment(formula) <- environment() # Needed in case we have a fixed intercept
+  if(only_coef){
+    new_order <- data[[col_for_row_n]]
+    mf <- mf[new_order, , drop = FALSE]
+  }
+
+  if(speedglm && requireNamespace("speedglm", quietly = T)){
+    if(only_coef){
+      offset <- if(family$family == "poisson")
+        data$log_delta_time else rep(0, nrow(mf))
+
+      fit <- speedglm::speedglm.wfit(
+        X = mf, y = data$Y, weights = data$weights,
+        family = family, offset = offset, ...)
+
+      return(fit$coefficients)
+    }
+
+    return(speedglm::speedglm(
+      formula = formula, data = data, family = family, model = model,
+      weights = data$weights, ...))
+  }
+
+  if(only_coef){
+    ctrl <- do.call(glm.control, list(...))
+
+    offset <- if(family$family == "poisson")
+      data$log_delta_time else rep(0, nrow(mf))
+
+    fit <- glm.fit(x = mf, y = data$Y, weights = data$weights,
+                   family = family, control = ctrl, offset = offset)
+
+    return(fit$coefficients)
+  }
+
   glm(formula = formula, data = data, family = family, model = model, weights = weights, ...)
 }

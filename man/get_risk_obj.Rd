@@ -4,7 +4,8 @@
 \alias{get_risk_obj}
 \title{Get the risk set at each bin over an equal distance grid}
 \usage{
-get_risk_obj(Y, by, max_T, id, is_for_discrete_model = T)
+get_risk_obj(Y, by, max_T, id, is_for_discrete_model = T, n_threads = 1,
+  min_chunk = 5000)
 }
 \arguments{
 \item{Y}{Vector of outcome variable}
@@ -16,6 +17,10 @@ get_risk_obj(Y, by, max_T, id, is_for_discrete_model = T)
 \item{id}{Vector with ids where entries match with outcomes \code{Y}}
 
 \item{is_for_discrete_model}{\code{TRUE}/\code{FALSE} for whether the model outcome is discrete. For example, a logit model is discrete whereas what is coined an exponential model in this package is a dynamic model}
+
+\item{n_threads}{Set to a value greater than one to use \code{\link{mclapply}} to find the risk object}
+
+\item{min_chunk}{Minimum chunk size of ids to use when parallel version is used.}
 }
 \value{
 A list with the following elements:
@@ -31,4 +36,3 @@ A list with the following elements:
 \description{
 Get the risk set at each bin over an equal distance grid
 }
-

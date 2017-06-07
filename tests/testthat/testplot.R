@@ -10,6 +10,7 @@ if(interactive()){
 # Had issues with win builder. Thus, these lines
 test_name <- "plot"
 cat("\nRunning", test_name, "\n")
+options(ddhazard_use_speedglm = F)
 
 
 # Test first order
@@ -37,7 +38,7 @@ test_that("Expecting plot calls to succed with first order model", {
   }
 
   suppressMessages(pbc_fit <- ddhazard(
-    formula = survival::Surv(tstart/100, tstop/100, status == 2) ~ log(bili) + log(protime),
+    formula = survival::Surv(tstart/100, tstop/100, death == 2) ~ log(bili) + log(protime),
     data = pbc2, model = "exp_clip_time", by = 1, max_T = 36,
     Q_0 = diag(2, 3), Q = diag(1e-3, 3), verbose = F,
     id = pbc2$id,
@@ -66,7 +67,7 @@ test_that("Expecting plot calls to succed with second order model", {
   expect_no_error(plot(result, type = "cov"))
 
   suppressMessages(pbc_fit <- ddhazard(
-    formula = survival::Surv(tstart/100, tstop/100, status == 2) ~ log(bili) + log(protime),
+    formula = survival::Surv(tstart/100, tstop/100, death == 2) ~ log(bili) + log(protime),
     data = pbc2, model = "exp_clip_time", by = 1, max_T = 36,
     Q_0 = diag(5, 6), Q = diag(c(rep(1e-3, 3))),
     id = pbc2$id, order = 2,
@@ -91,7 +92,7 @@ test_that("Alters mfcol and sets it back", {
     Q_0 = diag(10, 11),
     Q = diag(1e-2, 11),
     control = list(est_Q_0 = F, eps = 10^-2, n_max = 10^3,
-                   save_data = F, save_risk_set = F, ridge_eps = 1e-2),
+                   save_data = F, save_risk_set = F, denom_term = 1e-2),
     max_T = 10,
     id = sims$res$id, order = 1,
     verbose = F,

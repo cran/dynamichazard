@@ -1,4 +1,4 @@
-#include "dynamichazard.h"
+#include "bigglm_wrapper.h"
 
 extern "C" {
   #include <R_ext/Constants.h> // for DOUBLE_EPS
@@ -14,7 +14,7 @@ public:
   {}
 
   const arma::vec coefficients;
-  const arma::uvec pivot; // this differs from initial values by being zero indexed
+  const arma::uvec pivot; // this differs from initial values by having zero indexing
 };
 
 Cdqrls_res Cdqrls_wrapper(const arma::mat &X, const arma::vec &y,

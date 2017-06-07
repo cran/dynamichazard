@@ -7,10 +7,11 @@ library(dynamichazard)
 
 is_build_win = T
 if(is_build_win)
-  options(ddhazard_max_threads = 1)
+  options(ddhazard_max_threads = 2)
 
 cat("Running tests on:\n")
 print(R.version)
+options(warn=1)
 
 
 test_check("dynamichazard")

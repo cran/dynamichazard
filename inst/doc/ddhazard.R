@@ -2,10 +2,20 @@
 knitr::knit_hooks$set(default_opts = function(before, options, envir) {
     if (before){
       options(digist = 4)
+      par(
+        mar = c(5, 4, 1, 1),
+        bty = "n",
+        xaxs = "i",
+        pch=16,
+        cex= (cex <- .4),
+        cex.axis = .8 / cex,
+        cex.lab = .8 / cex,
+        lwd= 1)
     }
 })
+
 options(digist = 4)
-knitr::opts_chunk$set(echo = TRUE, warning = F, message = F, dpi = 36)
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F, dpi = 36, fig.height=3.5, fig.width = 6)
 knitr::opts_knit$set(warning = F, message = F,  default_opts = T)
 
 ## ----echo=FALSE----------------------------------------------------------
@@ -29,30 +39,30 @@ current_version # the string you need to pass to devtools::install_github
 #  install.packages("dynamichazard")
 
 ## ---- echo=FALSE---------------------------------------------------------
+library(survival)
 source("../R/test_utils.R")
 
 start_fun <- function(t_0 = t_0, t_max = t_max) max(0, runif(1, t_0 - t_max, t_max - 1 - 1e-8))
 
 # set.seed(print(round(runif(1, max = 1e6))))
-set.seed(126259)
+set.seed(126265)
 simple_ex <- test_sim_func_logit(
     n_series = 2e3, 
-    beta_start = c(2, 1),
-    intercept_start = - 5, 
-    sds = rep(1, 3),
+    beta_start = c(1.5, -1),
+    intercept_start = - 3, 
+    sds = rep(.5, 3),
     t_max = 28,
     n_vars = 2,
     lambda = 1/5,
     x_range = 1,
-    x_mean = .5,
+    x_mean = 0,
     tstart_sampl_func = start_fun)$res
 # sum(simple_ex$event)
-# max(simple_ex$event[simple_ex$id == 1])
 
 stopifnot(any(simple_ex$event[simple_ex$id == 1] == 1) && 
-            all(simple_ex$event[simple_ex$id == 2] == 0))
+              all(simple_ex$event[simple_ex$id == 2] == 0))
 
-## ------------------------------------------------------------------------
+## ---- echo = FALSE-------------------------------------------------------
 knitr::kable(head(simple_ex, 10), digits = 4)
 
 ## ------------------------------------------------------------------------
@@ -63,12 +73,10 @@ dd_fit_short <- ddhazard(
        data = simple_ex,
        by = 1,                          # Length of time intervals
        Q = diag(0.1, 3),                # Covariance matrix in state eqn 
-       Q_0 = diag(10, 3),               # Covariance matrix for initial state
+       Q_0 = diag(10000, 3),            # Covariance matrix for initial state
                                         # vector
        max_T = 28,                      # Last time we observe
-       id = simple_ex$id,               # id of individuals
-       control = 
-        list(ridge_eps = 0.0001)        # Penalty term explained later
+       id = simple_ex$id                # id of individuals
   )                      
 
 # Print diagonal of covariance matrix
@@ -82,21 +90,27 @@ dd_fit_wide <- ddhazard(
        data = simple_ex,
        by = 2,                          # increased
        Q = diag(0.1, 3),               
-       Q_0 = diag(10, 3), 
+       Q_0 = diag(10000, 3), 
        max_T = 28,                      
-       id = simple_ex$id,               
-       control = 
-        list(ridge_eps = 0.0002))       # increased               
+       id = simple_ex$id)            
 
 # Print relative differences between diagonal of covariance matrices
 Q_short <- dd_fit_short$Q
 Q_wide <- dd_fit_wide$Q
 diag((Q_wide - Q_short) / Q_short)   
 
+## ---- fig.height= 5------------------------------------------------------
+par(mfcol = c(2, 2), mar = c(5, 4, 1, 1))
+
+for(i in 1:3){
+  plot(dd_fit_short, cov_index = i, col = "Black")
+  plot(dd_fit_wide, cov_index = i, col = "Red", add = T)
+}
+
 ## ---- eval=FALSE---------------------------------------------------------
 #  dynamichazard::ddhazard_app()
 
-## ----binning_fig, echo=FALSE, results="hide", fig.cap = "Illustration of of going from event time to binary varibles. Each horizontal line represents an individual. A cross indicates that new covariates are observed while a filled circle indicates that the individual have died. Open circles indicates that the individual is right censored. Vertical dashed lines are time interval borders", fig.height=3----
+## ----binning_fig, echo=FALSE, results="hide", fig.cap = "Illustration of going from event times to binary variables. Each horizontal line represents an individual. A cross indicates that new covariates are observed while a filled circle indicates that the individual have died. Open circles indicates that the individual is right censored. Vertical dashed lines are time interval borders", fig.height=3----
 par(cex = .8, mar = c(1, 4, 1, 2))
 plot(c(0, 4), c(0, 1), type="n", xlab="", ylab="", axes = F)
 
@@ -151,7 +165,7 @@ for(i in seq_along(x_vals_and_point_codes)){
 # add letters
 text(rep(0, n_series), rev(y_pos), letters[1:n_series], cex = par()$cex * 1.5)
 
-## ---- echo=FALSE, fig.height=2-------------------------------------------
+## ---- echo=FALSE, fig.height=3-------------------------------------------
 f <- function(l) exp(-l) * (exp(l) - 1) * (1 - l) / l
 
 par(mfcol = c(1,2), 
@@ -159,12 +173,15 @@ par(mfcol = c(1,2),
     lwd = .67)
 
 tmp_cex <- .33
-plot(f, xlim = c(1e-2, 1e1), 
+plot(f, xlim = c(1e-2, 1e1), frame = FALSE, yaxt='n',
      xlab = expression(lambda), ylab = "Mean", cex = tmp_cex)
+axis(2, at = c(-1, 0, 1))
 abline(h = 0, lty = 2)
 
-plot(f, xlim = c(1e-3, 1e3), log = "x",
+plot(f, xlim = c(1e-3, 1e3), log = "x", frame = FALSE,
+     yaxt='n',
      xlab = expression(lambda), ylab = "Mean", cex = tmp_cex)
+axis(2, at = c(-1, 0, 1))
 abline(h = 0, lty = 2)
 
 ## ---- echo=FALSE---------------------------------------------------------

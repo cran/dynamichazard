@@ -10,6 +10,7 @@ if(interactive()){
 # Had issues with win builder. Thus, these lines
 test_name <- "predict"
 cat("\nRunning", test_name, "\n")
+options(ddhazard_use_speedglm = F)
 
 suppressMessages(result <- ddhazard(
   formula = survival::Surv(start, stop, event) ~ group,
@@ -194,9 +195,10 @@ test_that("get_survival_case_weights_and_data and predict yields consistent resu
   # unique(other_s$id)[abs(other_preds - preds) > 1e-14]
   # dumdum <- cbind(other_preds - preds, id = unique(other_s$id))[abs(other_preds - preds) > 1e-14,]
   #
-  # dumdum[dumdum[, "id"] == 5, ]
-  # s$res[s$res$id == 5, ]
-  # other_s[other_s$id == 5, ]
+  # tmp_id <- 10
+  # dumdum[dumdum[, "id"] == tmp_id, ]
+  # s$res[s$res$id == tmp_id, ]
+  # other_s[other_s$id == tmp_id, ]
   #
   # suppressMessages(preds <- predict(fit, new_data = s$res, tstart = "tstart_ceil", tstop = "tstop_ceil"))
   # preds$fits[s$res$id == 5]
@@ -240,21 +242,27 @@ test_that("predict functions throws error when model it is exponential",{
   expect_error(predict(dum))
 })
 
-# PBC dataset described in Fleming & Harrington (1991)
-library(timereg, quietly = T)
-data(pbc)
-head(pbc)
-# status at endpoint, 0/1/2 for censored, transplant, dead
+test_that("Term predict work with second order random walk", {
+  f1 <- ddhazard(
+    formula = Surv(tstart, tstop, death == 2) ~ edema + log(albumin) + log(bili) + log(protime),
+    data = pbc2,
+    order = 2,
+    id = pbc2$id, by = 100, max_T = 3600,
+    control = list(method = "GMA"),
+    Q_0 = diag(1, 10), Q = diag(rep(1e-4, 5)))
 
-pbc <- pbc[complete.cases(pbc[, c("time", "status", "age", "edema", "bili", "protime")]), ]
-max(pbc$time[pbc$status == 2])
-suppressMessages(fit <- ddhazard(
-  formula = survival::Surv(rep(0, length(status)), time, status == 2) ~ splines::ns(log(bili),df = 4),
-  data = pbc, Q_0 = diag(rep(1e3, 5)), by = 100,
-  Q = diag(rep(1e-2, 5)), max_T = 3600,
-  control = list(est_Q_0 = F, eps = .01)))
+  dum <- data.frame(
+    edema = 1,
+    albumin = exp(1),
+    bili = exp(1),
+    protime = exp(1))
 
-predict(fit, new_data = pbc[1:5, ], type = "term")
+  preds <- predict(f1, new_data = dum, type = "term", sds = T)
+
+  # plot(f1)
+  expect_equal(preds$terms[, 1,], f1$state_vecs[, 1:5])
+  expect_equal(preds$sds[, 1, ], sqrt(t(apply(f1$state_vars, 3, diag))[, 1:5]))
+})
 
 ######
 # Exponential model
@@ -263,14 +271,14 @@ pbc2_l$tstart <- pbc2_l$tstart / 100
 pbc2_l$tstop <- pbc2_l$tstop / 100
 
 suppressMessages(fit <- ddhazard(
-  formula = survival::Surv(tstart, tstop, status == 2) ~
+  formula = survival::Surv(tstart, tstop, death == 2) ~
     age + log(bili) + log(protime),
-  data = pbc2_l, Q_0 = diag(rep(1, 4)), by = 1,
+  data = pbc2_l, Q_0 = diag(rep(1e5, 4)), by = 1,
   id = pbc2_l$id,
-  Q = diag(rep(1e-2, 4)), max_T = 36,
-  model = "exp_combined", control = list(est_Q_0 = F)))
+  Q = diag(rep(1e-1, 4)), max_T = 36,
+  model = "exp_clip_time_w_jump"))
 
-# plot(fit, cov_index = 4)
+# plot(fit)
 
 test_that("Terms from predict with exponential outcome are correct", {
   pred <- predict(fit, new_data = pbc2_l, type = "term", tstart = "tstart", tstop = "tstop")
