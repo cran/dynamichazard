@@ -11,3 +11,7 @@ void tri_mat_times_vec(arma::mat&, const arma::vec&, arma::vec&, bool);
 void tri_mat_times_vec(arma::mat&, arma::vec&, bool);
 
 void sym_mat_rank_one_update(const double, const arma::vec&, arma::mat&);
+
+arma::vec sym_mat_times_vec(const arma::vec&, const arma::mat&);
+
+arma::mat out_mat_prod(const arma::mat &);
