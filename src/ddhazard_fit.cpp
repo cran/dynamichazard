@@ -30,12 +30,9 @@ extern std::vector<double> logLike_cpp(const arma::mat&, const Rcpp::List&,
                                        const arma::vec &,
                                        const int, const std::string);
 
-
-
 // Method to estimate fixed effects like in biglm::bigglm
-template<typename T>
-void estimate_fixed_effects(problem_data * const p_data, const int chunk_size,
-                            bigglm_updateQR<T> &updater){
+template <class updater>
+void estimate_fixed_effects(problem_data * const p_data, const int chunk_size){
   int it_outer = 0;
   arma::vec old_beta;
   do{
@@ -56,7 +53,7 @@ void estimate_fixed_effects(problem_data * const p_data, const int chunk_size,
     for(; it != p_data->risk_sets.end(); ++it, ++t){
 
       double bin_start = bin_stop;
-      double delta_t = p_data->I_len[t - 1];
+      double delta_t = p_data->I_len[t - 1]; // I_len is std::vector and thus uses zero index
       bin_stop += delta_t;
 
       // Find the risk set and the number of elements to take
@@ -77,6 +74,7 @@ void estimate_fixed_effects(problem_data * const p_data, const int chunk_size,
 
       if(p_data->any_dynamic){
         offsets.subvec(n_elements, n_elements + n_elements_to_take - 1) =
+		  // .col(t) and not .col(t - 1) this is a_(0 | d)
           p_data->X.cols(r_set).t() * p_data->a_t_t_s.col(t).head(p_data->n_params_state_vec);
       } else {
         offsets.subvec(n_elements, n_elements + n_elements_to_take - 1).fill(0.);
@@ -84,8 +82,9 @@ void estimate_fixed_effects(problem_data * const p_data, const int chunk_size,
 
       for(arma::uword i = 0; i < r_set.n_elem; ++i){
         offsets(n_elements + i) +=
-          T().time_offset(std::min(p_data->tstop(r_set(i)), bin_stop)
-                            - std::max(p_data->tstart(r_set(i)), bin_start));
+          updater::family::time_offset(
+            std::min(p_data->tstop(r_set(i)), bin_stop)
+              - std::max(p_data->tstart(r_set(i)), bin_start));
       }
 
       n_elements += n_elements_to_take;
@@ -93,7 +92,7 @@ void estimate_fixed_effects(problem_data * const p_data, const int chunk_size,
       if(n_elements == chunk_size){ // we have reached the chunk_size
 
         arma::vec eta = fixed_terms.t() * p_data->fixed_parems;
-        updater.update(qr, fixed_terms, eta, offsets, y, w);
+        updater::update(qr, fixed_terms, eta, offsets, y, w);
 
         n_elements = 0;
       } else if(it == --p_data->risk_sets.end()){ // there is no more bins to process
@@ -104,11 +103,11 @@ void estimate_fixed_effects(problem_data * const p_data, const int chunk_size,
         offsets = offsets.subvec(0, n_elements - 1);
 
         arma::vec eta =  fixed_terms.t() * p_data->fixed_parems;
-        updater.update(qr, fixed_terms, eta, offsets, y, w);
+        updater::update(qr, fixed_terms, eta, offsets, y, w);
       }
 
       if(cursor_risk_set + n_elements_to_take < r_set_size){ // there are still elements left in the bin
-        cursor_risk_set = cursor_risk_set + n_elements_to_take;
+        cursor_risk_set += n_elements_to_take;
         --it;
         --t;
         bin_stop -= delta_t;
@@ -227,7 +226,7 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
       eps_fixed_parems, max_it_fixed_params, weights,
       n_max, eps, verbose,
       order_, est_Q_0, debug, LR, n_threads, denom_term, use_pinv,
-      criteria, EKF_batch_size));
+      criteria));
 
     if(model == "logit"){
       solver.reset(new UKF_logit(*p_data.get(), kappa, alpha, beta));
@@ -257,7 +256,7 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
       weights,
       n_max, eps, verbose,
       order_, est_Q_0, debug, LR, n_threads, denom_term, use_pinv,
-      criteria, EKF_batch_size));
+      criteria));
 
     if(p_data->any_fixed_in_M_step)
       Rcpp::stop("Fixed effects is not implemented with UKF");
@@ -274,7 +273,7 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
         weights,
         n_max, eps, verbose,
         order_, est_Q_0, debug, LR, n_threads, denom_term, use_pinv,
-        criteria, EKF_batch_size));
+        criteria));
 
     if(model == "logit"){
       solver.reset(new SMA_logit(*p_data.get(), posterior_version));
@@ -293,7 +292,7 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
         weights,
         n_max, eps, verbose,
         order_, est_Q_0, debug, LR, n_threads, denom_term, use_pinv,
-        criteria, EKF_batch_size));
+        criteria));
 
     if(model == "logit"){
       solver.reset(new GMA_logit(*p_data.get(), GMA_max_rep, GMA_NR_eps));
@@ -314,12 +313,14 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
   }
 
   arma::mat varying_only_F = p_data->F_;
-
-  if(p_data->any_fixed_terms_in_state_vec){
-    varying_only_F.shed_rows(p_data->span_fixed_params.a, p_data->span_fixed_params.b);
-    varying_only_F.shed_cols(p_data->span_fixed_params.a, p_data->span_fixed_params.b);
+  if(p_data->any_fixed_in_E_step){
+    if(p_data->any_fixed_in_E_step){
+      varying_only_F.shed_rows(p_data->span_fixed_params->a, p_data->span_fixed_params->b);
+      varying_only_F.shed_cols(p_data->span_fixed_params->a, p_data->span_fixed_params->b);
+    } else{
+      varying_only_F = arma::mat();
+    }
   }
-
 
   do
   {
@@ -417,9 +418,9 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
       Q /= p_data->d;
 
 
-      if(p_data->any_fixed_terms_in_state_vec){
-        Q.rows(p_data->span_fixed_params).zeros();
-        Q.cols(p_data->span_fixed_params).zeros();
+      if(p_data->any_fixed_in_E_step){
+        Q.rows(*p_data->span_fixed_params).zeros();
+        Q.cols(*p_data->span_fixed_params).zeros();
       }
 
       if((test_max_diff = static_cast<arma::mat>(Q - Q.t()).max()) > Q_warn_eps){
@@ -441,9 +442,9 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
       Q_0 = (Q_0 + Q_0.t()) / 2.0;
 
       if(order_ > 1){
-        arma::mat tmp_Q = Q(p_data->span_current_cov, p_data->span_current_cov);
+        arma::mat tmp_Q = Q(*p_data->span_current_cov, *p_data->span_current_cov);
         Q.zeros();
-        Q(p_data->span_current_cov , p_data->span_current_cov) = tmp_Q;
+        Q(*p_data->span_current_cov, *p_data->span_current_cov) = tmp_Q;
       }
     }
 
@@ -452,10 +453,10 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
     }
 
     if(p_data->criteria == "delta_coef"){
-      if(p_data->any_fixed_terms_in_state_vec ||
+      if(p_data->any_fixed_in_E_step ||
          p_data->any_dynamic){
-        conv_values.push_back(conv_criteria(a_prev(p_data->span_current_cov, arma::span::all),
-                                            p_data->a_t_t_s(p_data->span_current_cov, arma::span::all)));
+        conv_values.push_back(conv_criteria(a_prev(*p_data->span_current_cov, arma::span::all),
+                                            p_data->a_t_t_s(*p_data->span_current_cov, arma::span::all)));
       } else
         conv_values.push_back(0.0);
     }
@@ -464,12 +465,12 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
       arma::vec old = p_data->fixed_parems;
 
       if(model == "logit"){
-        bigglm_updateQR_logit  updater;
-        estimate_fixed_effects(p_data.get(), fixed_effect_chunk_size, updater);
+        estimate_fixed_effects<bigglm_updateQR_logit>(
+          p_data.get(), fixed_effect_chunk_size);
 
       } else if(is_exponential_model(model)){
-        bigglm_updateQR_poisson updater;
-        estimate_fixed_effects(p_data.get(), fixed_effect_chunk_size, updater);
+        estimate_fixed_effects<bigglm_updateQR_poisson>(
+          p_data.get(), fixed_effect_chunk_size);
 
       } else
         Rcpp::stop("Fixed effects is not implemented for '" + model  +"'");
@@ -487,12 +488,12 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
       if(p_data->any_fixed_in_M_step){
         fixed_effects_offsets = p_data->fixed_terms.t() * p_data->fixed_parems;
 
-      } else if(p_data->any_fixed_terms_in_state_vec){
+      } else if(p_data->any_fixed_in_E_step){
         fixed_effects_offsets =
-          p_data->X(p_data->span_fixed_params, arma::span::all).t() *
-          p_data->a_t_t_s(p_data->span_fixed_params, arma::span::all).col(0);
+          p_data->X(*p_data->span_fixed_params, arma::span::all).t() *
+          p_data->a_t_t_s(*p_data->span_fixed_params, arma::span::all).col(0);
 
-        varying_only_a.shed_rows(p_data->span_fixed_params.a, p_data->span_fixed_params.b);
+        varying_only_a.shed_rows(p_data->span_fixed_params->a, p_data->span_fixed_params->b);
 
       } else{
         fixed_effects_offsets = arma::vec(p_data->X.n_cols, arma::fill::zeros);
@@ -500,11 +501,11 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
       }
 
       log_like =
-        logLike_cpp(p_data->X(p_data->span_current_cov_varying, arma::span::all),
+        logLike_cpp(p_data->X(*p_data->span_current_cov_varying, arma::span::all),
                     risk_obj,
                     varying_only_F,
-                    Q_0(p_data->span_current_cov_varying, p_data->span_current_cov_varying),
-                    Q(p_data->span_current_cov_varying, p_data->span_current_cov_varying),
+                    Q_0(*p_data->span_current_cov_varying, *p_data->span_current_cov_varying),
+                    Q(*p_data->span_current_cov_varying, *p_data->span_current_cov_varying),
                     varying_only_a,
                     p_data->tstart, p_data->tstop,
                     fixed_effects_offsets, order_, model)[0];
@@ -558,6 +559,7 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
 
 
 // Exported for test only
+// It is here for the definition of the is_exponential_model function
 // [[Rcpp::export]]
 void bigglm_updateQR_rcpp(arma::vec &D, arma::vec &rbar, arma::vec &thetab,
                           double &ss, bool &checked, arma::vec &tol,
@@ -575,8 +577,8 @@ void bigglm_updateQR_rcpp(arma::vec &D, arma::vec &rbar, arma::vec &thetab,
   qr.tol = std::shared_ptr<arma::vec>(&tol, [](arma::vec*x) -> void { });
 
   if(model == "logit"){
-    return(bigglm_updateQR_logit().update(qr, X, eta, offset, y, w));
+    return(bigglm_updateQR_logit::update(qr, X, eta, offset, y, w));
   } else if (is_exponential_model(model)){
-    return(bigglm_updateQR_poisson().update(qr, X, eta, offset, y, w));
+    return(bigglm_updateQR_poisson::update(qr, X, eta, offset, y, w));
   }
 }
