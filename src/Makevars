@@ -1,5 +1,5 @@
-SOURCES_C = stats/lm.c
-SOURCES_CPP = Cdqrls_wrapper.cpp RcppExports.cpp bigglm_wrapper.cpp ddhazard_fit.cpp loglike.cpp risk_obj.cpp ddhazard_EKF_solver.cpp ddhazard_UKF_solver.cpp LAPACK_BLAS_wrapper.cpp arma_utils.cpp ddhazard_SMA_solver.cpp ddhazard_GMA_solver.cpp
+SOURCES_C =
+SOURCES_CPP = RcppExports.cpp bigglm_wrapper.cpp ddhazard_fit.cpp loglike.cpp risk_obj.cpp ddhazard_EKF_solver.cpp ddhazard_UKF_solver.cpp LAPACK_BLAS_wrapper.cpp arma_utils.cpp ddhazard_SMA_solver.cpp ddhazard_GMA_solver.cpp
 SOURCES_F = biglm/boundedQRf.f dchur.f
 CXX_STD = CXX11
 OBJECTS = $(SOURCES_CPP:.cpp=.o)  $(SOURCES_C:.c=.o) $(SOURCES_F:.f=.o)
@@ -14,15 +14,13 @@ BIGGLM_DEPS = arma_n_rcpp.h bigglm_wrapper.h
 
 all: $(SHLIB)
 
-$(SHLIB): $(OBJECTS)
-
 loglike.o: arma_n_rcpp.h loglike.cpp
 
 Cdqrls_wrapper.o: $(BIGGLM_DEPS) Cdqrls_wrapper.cpp
 
 bigglm_wrapper.o: $(BIGGLM_DEPS) bigglm_wrapper.cpp
 
-ddhazard.o: $(DD_DEPS) $(BIGGLM_DEPS) thread_pool.h ddhazard.cpp
+ddhazard.o: $(DD_DEPS) $(BIGGLM_DEPS) thread_pool.h estimate_fixed_effects_M_step.h ddhazard.cpp
 
 ddhazard_EKF_solver.o: $(DD_DEPS) exp_model_funcs.h thread_pool.h ddhazard_EKF_solver.cpp
 
