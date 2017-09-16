@@ -1,4 +1,4 @@
-context("Testing testfixed_terms_est_in_M_step")
+context("Testing test_fixed_effects_in_M_step")
 
 set.seed(548237)
 sims <- test_sim_func_logit(n_series = 1e3, n_vars = 3, t_0 = 0, t_max = 10,
@@ -39,10 +39,7 @@ test_that("Get previous results with logit model with some fixed terms", {
 
 
 test_that("Only fixed effects yields same results as bigglm with exponential model", {
-  set.seed(4682146)
-  sims <- test_sim_func_exp(n_series = 1e3, n_vars = 3, t_0 = 0, t_max = 10,
-                            x_range = 1, x_mean = 0, re_draw = T, beta_start = 0,
-                            intercept_start = -4, sds = c(.1, rep(1, 3)))
+  sims <- exp_sim_200
 
   form <- formula(survival::Surv(tstart, tstop, event) ~
                     -1 + ddFixed(rep(1, length(x1))) + ddFixed(x1) + ddFixed(x2) + ddFixed(x3))
@@ -63,6 +60,7 @@ test_that("Only fixed effects yields same results as bigglm with exponential mod
 })
 
 test_that("Changing fixed effect control parems changes the result", {
+  sims <- exp_sim_200
   arg_list <- list(
     formula(survival::Surv(tstart, tstop, event) ~
               -1 + ddFixed(rep(1, length(x1))) + ddFixed(x1) + ddFixed(x2) + ddFixed(x3)),
@@ -92,6 +90,7 @@ test_that("Changing fixed effect control parems changes the result", {
 })
 
 test_that("Get previous results with exponential model with some fixed terms", {
+  sims <- exp_sim_200
   form <- formula(survival::Surv(tstart, tstop, event) ~
                     -1 + ddFixed(rep(1, length(x1))) + x1 + x2 + x3)
 
@@ -113,13 +112,11 @@ test_that("Get previous results with exponential model with some fixed terms", {
 })
 
 test_that("UKF with fixed effects works", {
-  set.seed(2231412)
-  sims <- test_sim_func_exp(n_series = 1e3, n_vars = 3, t_0 = 0, t_max = 10,
-                            x_range = 1, x_mean = 0, re_draw = T, beta_start = 0,
-                            intercept_start = -4, sds = c(.1, rep(1, 3)))
+  sims <- exp_sim_200
 
   fit <- ddhazard(formula(survival::Surv(tstart, tstop, event) ~
                             -1 + ddFixed(rep(1, length(x1))) + ddFixed(x1) + x2 + x3),
+                  Q = diag(1, 2), Q_0 = diag(10, 2),
                   data = sims$res, model = "logit", by = 1, id = sims$res$id, max_T = 10,
                   control = list(method = "UKF", fixed_parems_start = rep(0, 2),
                                  save_data = F, save_risk_set = F,
@@ -128,6 +125,7 @@ test_that("UKF with fixed effects works", {
 
   # matplot(sims$betas, type = "l", lty = 1)
   # matplot(fit$state_vecs, type = "l", lty = 2, col = 3:4, add = T)
+  # fit$fixed_effects
   fit <- fit[c("state_vars", "state_vecs", "fixed_effects")]
   # save_to_test(fit, "fixed_terms_UKF")
 
@@ -136,6 +134,7 @@ test_that("UKF with fixed effects works", {
   #####
   fit <- ddhazard(formula(survival::Surv(tstart, tstop, event) ~
                             -1 + ddFixed(rep(1, length(x1))) + ddFixed(x1) + x2 + x3),
+                  Q = diag(1, 2), Q_0 = diag(10, 2),
                   data = sims$res, model = "exp_clip_time_w_jump", by = 1, id = sims$res$id, max_T = 10,
                   control = list(method = "UKF",
                                  fixed_terms_method = "M_step"))
@@ -143,6 +142,7 @@ test_that("UKF with fixed effects works", {
 
   # matplot(sims$betas, type = "l", ylim = range(fit$state_vecs, sims$betas))
   # matplot(fit$state_vecs, type = "l", col = 3:4, add = T, lty = 1)
+  # fit$fixed_effects
 
   fit <- fit[c("state_vars", "state_vecs", "fixed_effects")]
   # save_to_test(fit, "fixed_terms_UKF_exp")
@@ -152,12 +152,16 @@ test_that("UKF with fixed effects works", {
 
 
 test_that("posterior_approx gives previous found values with fixed effects in M-step", {
+  skip_on_cran()
+
   set.seed(950466)
-  f1 <- ddhazard(Surv(tstart, tstop, death == 2) ~ ddFixed(age) + ddFixed(edema) +
-                  log(albumin) + log(protime) + log(bili), pbc2,
-                 id = pbc2$id, by = 100, max_T = 3600,
-                 control = list(method = "SMA",  fixed_terms_method = "M_step"),
-                 Q_0 = diag(rep(100000, 4)), Q = diag(rep(0.01, 4)))
+  f1 <- suppressWarnings(ddhazard(
+    Surv(tstart, tstop, death == 2) ~ ddFixed(age) + ddFixed(edema) +
+      log(albumin) + log(protime) + log(bili), pbc2,
+     id = pbc2$id, by = 100, max_T = 3600,
+     control = list(method = "SMA",  fixed_terms_method = "M_step",
+                    eps_fixed_parems = 1e-4),
+     Q_0 = diag(rep(100000, 4)), Q = diag(rep(1e-3, 4))))
 
   # plot(f1)
   # f1$fixed_effects

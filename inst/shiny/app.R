@@ -30,7 +30,8 @@ start_args <- list(
   order = 1, denom_term = 1, fixed_terms_method = "M_step",
   use_extra_correction = F, beta = 0, alpha = 1,
   SMA_version = "woodbury", GMA_max_rep = 25,
-  GMA_NR_eps = 4, more_options = F, debug = FALSE)
+  GMA_NR_eps = 2, more_options = F, debug = FALSE,
+  n_threads = max(1, parallel::detectCores() - 2))
 
 if(exists("input_args")){
   if(any(is.na(arg_match <- match(names(input_args), names(start_args)))))
@@ -109,7 +110,7 @@ get_JS_code_for_log_slider <- function(input_name, base, exp_min, exp_max){
   }, 5)})")
 }
 
-n_series_stuff <- list(base = 2, exp_min = 6, exp_max = 18)
+n_series_stuff <- list(base = 2, exp_min = 6, exp_max = 19)
 
 JScode <- get_JS_code_for_log_slider(
   "n_series", n_series_stuff$base, n_series_stuff$exp_min, n_series_stuff$exp_max)
@@ -314,7 +315,7 @@ ui <- fluidPage(
        column(
          6,
          h3("Intro"),
-         div("Illustrates simulated data and a fit. The true coefficients are the continous curves and the predicted coefficients are the dashed curves. Shaded areas are 95% confidence bounds from smoothed covariance matrices", style = get_em(3)),
+         div("Illustrates simulated data and a fit. The true coefficients are the continous curves and the predicted coefficients are the dashed curves. Shaded areas are 95% confidence bounds from smoothed covariance matrices", style = get_em(4)),
          div(textOutput("rug_explanation"), style = get_em(4)),
          div("See the ddhazard vignette for further details", style = get_em(1))
        ),
@@ -466,8 +467,9 @@ server <- function(input, output) {
 
     }
 
-    control_list <- list(eps = 10^-2, n_max = 10,
-                         method = input$est_with_method)
+    control_list <- list(eps = 1e-3, n_max = 10,
+                         method = input$est_with_method,
+                         n_threads = start_args$n_threads)
 
     if(input$est_with_method == "UKF"){
       control_list <- c(control_list,
@@ -478,7 +480,7 @@ server <- function(input, output) {
       control_list$denom_term <- denom_term()
       if(input$use_extra_correction)
         control_list <- c(control_list,
-                          list(NR_eps = .001))
+                          list(NR_eps = 1e-5))
 
     } else if(input$est_with_method == "SMA"){
       control_list$posterior_version = input$SMA_version

@@ -1,12 +1,13 @@
 #ifndef DDHAZARD_EST_M_STEP_H
 #define DDHAZARD_EST_M_STEP_H
 #include "bigglm_wrapper.h"
-#include "ddhazard_problem_data.h"
+#include "problem_data.h"
 #include "arma_n_rcpp.h"
+#include "utils.h"
 
 // Method to estimate fixed effects like in biglm::bigglm
 template <class updater>
-void estimate_fixed_effects_M_step(problem_data * const p_data, arma::uword chunk_size){
+void estimate_fixed_effects_M_step(ddhazard_data * const p_data, arma::uword chunk_size){
   using uword = arma::uword;
 
   // Data storage class
@@ -28,7 +29,7 @@ void estimate_fixed_effects_M_step(problem_data * const p_data, arma::uword chun
     bin_stop += delta_t;
 
     // Find the risk set
-    arma::uvec r_set = Rcpp::as<arma::uvec>(*it) - 1;
+    arma::uvec r_set = get_risk_set(*p_data, t);
 
     // Compute offsets from dynamic effects if needed
     arma::vec offsets;

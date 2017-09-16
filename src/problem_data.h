@@ -1,10 +1,14 @@
-#ifndef DDHAZARD_PROBLEM_DATA
-#define DDHAZARD_PROBLEM_DATA
+#ifndef DDHAZARD_DATA
+#define DDHAZARD_DATA
 
 #include "arma_n_rcpp.h"
 #include <future>
 
-class problem_data{
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
+class problem_data {
 public:
   // Constants
   const bool any_dynamic;         // Any time-varying coefficients?
@@ -32,10 +36,8 @@ public:
 
   arma::mat X;
   arma::mat fixed_terms; // used if fixed terms are estimated in the M-step
-  const arma::vec &weights;
 
   const std::vector<double> I_len;
-  const double event_eps; // something small
 
   const int n_threads;
 
@@ -45,35 +47,9 @@ public:
 
   const double min_start;
 
-  const double eps_fixed_parems;
-  const int max_it_fixed_params;
-
-  const double denom_term;
-
-  const bool debug;
-  const double LR;
-
-  const bool use_pinv;
-  const std::string criteria;
-
-  // Declare non constants. Some are intialize
-  arma::vec fixed_parems;
-
+  // non-constants
   arma::mat &Q;
   arma::mat &Q_0;
-
-  arma::mat a_t_t_s;
-  arma::mat a_t_less_s;
-
-  arma::cube V_t_t_s;
-  arma::cube V_t_less_s;
-  arma::cube B_s;
-
-  arma::cube lag_one_cov;
-
-  // Information for debugging
-  std::string computation_stage;
-  int em_iteration;
 
   problem_data(const int n_fixed_terms_in_state_vec_,
                arma::mat &X_,
@@ -81,23 +57,13 @@ public:
                const arma::vec &tstart_,
                const arma::vec &tstop_, const arma::ivec &is_event_in_bin_,
                const arma::colvec &a_0,
-               const arma::vec &fixed_parems_start,
                arma::mat &Q_0_,
                arma::mat &Q_,
                const Rcpp::List &risk_obj,
                const arma::mat &F__,
-               const double eps_fixed_parems_,
-               const int max_it_fixed_params_,
-               const arma::vec &weights_,
-               const int n_max, const double eps,
-               const bool verbose,
-               const int order_, const bool est_Q_0,
-               const bool debug_,
-               Rcpp::Nullable<Rcpp::NumericVector> LR_,
-               const int n_threads_,
-               const double denom_term_,
-               const bool use_pinv_,
-               const std::string criteria_):
+               const int n_max,
+               const int order_,
+               const int n_threads_):
     any_dynamic(X_.n_elem > 0),
     any_fixed_in_E_step(n_fixed_terms_in_state_vec_ > 0),
     any_fixed_in_M_step(fixed_terms_.n_elem > 0),
@@ -117,26 +83,20 @@ public:
     // nullptr when the span should not be used
     span_current_cov(
       (any_dynamic || any_fixed_in_E_step) ?
-        new arma::span(0, n_params_state_vec - 1) :
-        nullptr),
+        new arma::span(0, n_params_state_vec - 1) : nullptr),
     span_current_cov_varying(
       any_dynamic ?
-        new arma::span(0, n_params_state_vec_varying - 1) :
-        nullptr),
+        new arma::span(0, n_params_state_vec_varying - 1) : nullptr),
     span_fixed_params(
       any_fixed_in_E_step ?
-        new arma::span(n_params_state_vec_varying, n_params_state_vec - 1) :
-        nullptr),
+        new arma::span(n_params_state_vec_varying, n_params_state_vec - 1) : nullptr),
 
     F_(F__),
     T_F_((any_dynamic || any_fixed_in_E_step) ? F_.t() : arma::mat()),
 
     X(X_.begin(), X_.n_rows, X_.n_cols, false),
     fixed_terms(fixed_terms_.begin(), fixed_terms_.n_rows, fixed_terms_.n_cols, false),
-    weights(weights_),
     I_len(Rcpp::as<std::vector<double> >(risk_obj["I_len"])),
-
-    event_eps(d * std::numeric_limits<double>::epsilon()),
 
     n_threads((n_threads_ > 0) ? n_threads_ : std::thread::hardware_concurrency()),
 
@@ -145,6 +105,92 @@ public:
     is_event_in_bin(is_event_in_bin_),
     min_start(Rcpp::as<double>(risk_obj["min_start"])),
 
+    Q(Q_),
+    Q_0(Q_0_)
+  {
+#ifdef _OPENMP
+    omp_set_num_threads(n_threads);
+    omp_set_nested(0);
+#endif
+  }
+
+  problem_data & operator=(const problem_data&) = delete;
+  problem_data(const problem_data&) = delete;
+  problem_data() = delete;
+};
+
+class ddhazard_data : public problem_data {
+public:
+  // constants
+  const arma::vec &weights;
+
+  const double event_eps; // something small
+  const double eps_fixed_parems;
+  const int max_it_fixed_params;
+
+  const double denom_term;
+
+  const bool debug;
+  const double LR;
+
+  const bool use_pinv;
+  const std::string criteria;
+
+  // Declare non constants. Some are intialize
+  arma::vec fixed_parems;
+  arma::mat a_t_t_s;
+  arma::mat a_t_less_s;
+
+  arma::cube V_t_t_s;
+  arma::cube V_t_less_s;
+  arma::cube B_s;
+
+  arma::cube lag_one_cov;
+
+  // Information for debugging
+  std::string computation_stage;
+  int em_iteration;
+
+  ddhazard_data(const int n_fixed_terms_in_state_vec_,
+                arma::mat &X_,
+                arma::mat &fixed_terms_,
+                const arma::vec &tstart_,
+                const arma::vec &tstop_, const arma::ivec &is_event_in_bin_,
+                const arma::colvec &a_0,
+                const arma::vec &fixed_parems_start,
+                arma::mat &Q_0_,
+                arma::mat &Q_,
+                const Rcpp::List &risk_obj,
+                const arma::mat &F__,
+                const double eps_fixed_parems_,
+                const int max_it_fixed_params_,
+                const arma::vec &weights_,
+                const int n_max, const double eps,
+                const bool verbose,
+                const int order_, const bool est_Q_0,
+                const bool debug_,
+                Rcpp::Nullable<Rcpp::NumericVector> LR_,
+                const int n_threads_,
+                const double denom_term_,
+                const bool use_pinv_,
+                const std::string criteria_):
+    problem_data(
+      n_fixed_terms_in_state_vec_,
+      X_,
+      fixed_terms_,
+      tstart_,
+      tstop_, is_event_in_bin_,
+      a_0,
+      Q_0_,
+      Q_,
+      risk_obj,
+      F__,
+      n_max,
+      order_,
+      n_threads_),
+    weights(weights_),
+
+    event_eps(d * std::numeric_limits<double>::epsilon()),
     eps_fixed_parems(eps_fixed_parems_),
     max_it_fixed_params(max_it_fixed_params_),
     denom_term(denom_term_),
@@ -154,11 +200,11 @@ public:
 
     use_pinv(use_pinv_),
     criteria(criteria_),
-
-    fixed_parems(fixed_parems_start),
-    Q(Q_),
-    Q_0(Q_0_)
+    fixed_parems(fixed_parems_start)
   {
+    if(debug)
+      Rcpp::Rcout << "Using " << n_threads << " threads" << std::endl;
+
     if(any_dynamic || any_fixed_in_E_step){
       a_t_t_s = arma::mat(space_dim_in_arrays, d + 1);
       a_t_less_s = arma::mat(space_dim_in_arrays, d);
@@ -170,18 +216,15 @@ public:
 
       lag_one_cov = arma::cube(space_dim_in_arrays, space_dim_in_arrays, d);
     }
-
-    if(debug)
-      Rcpp::Rcout << "Using " << n_threads << " threads" << std::endl;
   }
 
-  problem_data & operator=(const problem_data&) = delete;
-  problem_data(const problem_data&) = delete;
-  problem_data() = delete;
+  ddhazard_data & operator=(const ddhazard_data&) = delete;
+  ddhazard_data(const ddhazard_data&) = delete;
+  ddhazard_data() = delete;
 };
 
 // Class with further members for the Extended Kalman Filter
-class problem_data_EKF : public problem_data{
+class ddhazard_data_EKF : public ddhazard_data{
 public:
   // locks for parallel implementation when we need to perform reduction from
   // local score vectors and information matricies
@@ -205,7 +248,7 @@ public:
   arma::vec H_diag_inv;
   arma::mat K_d;
 
-  problem_data_EKF(const int n_fixed_terms_in_state_vec_,
+  ddhazard_data_EKF(const int n_fixed_terms_in_state_vec_,
                    arma::mat &X, arma::mat &fixed_terms,
                    const arma::vec &tstart_,
                    const arma::vec &tstop_, const arma::ivec &is_event_in_bin_,
@@ -231,7 +274,7 @@ public:
                    const bool use_pinv_,
                    const std::string criteria_,
                    const int EKF_batch_size_):
-    problem_data(n_fixed_terms_in_state_vec_, X, fixed_terms, tstart_, tstop_, is_event_in_bin_, a_0,
+    ddhazard_data(n_fixed_terms_in_state_vec_, X, fixed_terms, tstart_, tstop_, is_event_in_bin_, a_0,
                  fixed_parems_start, Q_0_, Q_, risk_obj, F__,
                  eps_fixed_parems_, max_it_fixed_params_,
                  weights_,
@@ -256,12 +299,12 @@ public:
     }
   }
 
-  problem_data_EKF & operator=(const problem_data_EKF&) = delete;
-  problem_data_EKF(const problem_data_EKF&) = delete;
-  problem_data_EKF() = delete;
+  ddhazard_data_EKF & operator=(const ddhazard_data_EKF&) = delete;
+  ddhazard_data_EKF(const ddhazard_data_EKF&) = delete;
+  ddhazard_data_EKF() = delete;
 };
 
-inline std::string debug_msg_prefix(const problem_data &dat){
+inline std::string debug_msg_prefix(const ddhazard_data &dat){
   std::stringstream out;
   out << "--it " << std::setw(5) <<  dat.em_iteration
       << ", " << dat.computation_stage << ": ";
@@ -271,20 +314,20 @@ inline std::string debug_msg_prefix(const problem_data &dat){
 template<typename T>
 inline
 void
-my_print(const problem_data &dat, const T &X, std::string msg = "")
+my_print(const ddhazard_data &dat, const T &X, std::string msg = "")
 {
   my_print(X, msg, debug_msg_prefix(dat));
 }
 
 class my_debug_logger{
 private:
-  const problem_data *dat;
+  const ddhazard_data *dat;
 
 protected:
   std::ostringstream os;
 
 public:
-  my_debug_logger(const problem_data &dat_):
+  my_debug_logger(const ddhazard_data &dat_):
   dat(&dat_) {}
 
   template<typename T>

@@ -1,5 +1,6 @@
-#include "ddhazard.h"
-#include "arma_utils.h"
+#include "../ddhazard.h"
+#include "../arma_BLAS_LAPACK.h"
+#include "../utils.h"
 
 inline double SMA_hepler_logit::NR_delta(
       const double offset, const double coef1, const double coef2,
@@ -16,7 +17,7 @@ inline double SMA_hepler_logit::NR_delta(
       (2. * coef1 + w * e / pow(1. + e, 2));
 };
 
-inline double SMA_hepler_logit::compute_length(
+double SMA_hepler_logit::compute_length(
     const double offset, const double coef1, const double coef2,
     const double w, const bool is_event, const double length){
   double c0 = 0.;
@@ -41,27 +42,11 @@ inline double SMA_hepler_logit::compute_length(
   return c1;
 };
 
-inline double SMA_hepler_logit::second_d(
+double SMA_hepler_logit::second_d(
   const double c, const double offset, const double length){
     const double e = exp(c + offset);
     return - e / pow(1. + e, 2);
 };
-
-// Export for tests
-// [[Rcpp::export]]
-double SMA_hepler_logit_compute_length(
-    const double offset, const double coef1, const double coef2,
-    const double w, const bool y){
-  return SMA_hepler_logit::compute_length(
-    offset, coef1, coef2, w, y, 0.);
-};
-
-// [[Rcpp::export]]
-double SMA_hepler_logit_second_d(
-    const double c, const double offset){
-  return SMA_hepler_logit::second_d(c, offset,0.);
-};
-
 
 
 
@@ -80,7 +65,7 @@ inline double SMA_hepler_exp::NR_delta(
   return (2. * coef1 * c0 + coef2 + w *  e) / (2. * coef1 + w * e);
 };
 
-inline double SMA_hepler_exp::compute_length(
+double SMA_hepler_exp::compute_length(
     const double offset, const double coef1, const double coef2,
     const double w, const bool is_event, const double length){
   double c0 = 0.;
@@ -105,24 +90,9 @@ inline double SMA_hepler_exp::compute_length(
   return c1;
 };
 
-inline double SMA_hepler_exp::second_d(
+double SMA_hepler_exp::second_d(
     const double c, const double offset, const double length){
   return -  exp(c + offset + log(length));
-};
-
-// Export for tests
-// [[Rcpp::export]]
-double SMA_hepler_exp_compute_length(
-    const double offset, const double coef1, const double coef2,
-    const double w, const bool y, const double length){
-  return SMA_hepler_exp::compute_length(
-    offset, coef1, coef2, w, y, length);
-};
-
-// [[Rcpp::export]]
-double SMA_hepler_exp_second_d(
-    const double c, const double offset, const double length){
-  return SMA_hepler_exp::second_d(c, offset, length);
 };
 
 
@@ -158,13 +128,7 @@ void SMA<T>::solve(){
     }
 
     // E-step: scoring step
-#ifdef USE_OPEN_BLAS
-    // adverse effect on performance unless the dimension of state vector is
-    // quite large
-    openblas_set_num_threads(1);
-#endif
-
-    arma::uvec r_set = Rcpp::as<arma::uvec>(p_dat.risk_sets[t - 1]) - 1;
+    arma::uvec r_set = get_risk_set(p_dat, t);
     arma::vec a(p_dat.a_t_t_s.colptr(t), p_dat.space_dim_in_arrays, false);
     arma::mat V(p_dat.V_t_t_s.slice(t).memptr(), p_dat.space_dim_in_arrays,
                 p_dat.space_dim_in_arrays, false);
@@ -190,11 +154,11 @@ void SMA<T>::solve(){
         const double f2 = arma::dot(x_, a.head(p_dat.n_params_state_vec));
 
         const bool is_event = p_dat.is_event_in_bin(*it) == bin_number;
-        const double at_risk_lenght =
-          std::min(p_dat.tstop(*it), bin_tstop) - std::max(p_dat.tstart(*it), bin_tstart);
+        const double at_risk_length =
+          get_at_risk_length(p_dat.tstop(*it), bin_tstop, p_dat.tstart(*it), bin_tstart);
 
-        const double c = T::compute_length(offset, f1 / 2., -f2 * f1, w, is_event, at_risk_lenght);
-        const double neg_second_d = - w * T::second_d(c, offset, at_risk_lenght);
+        const double c = T::compute_length(offset, f1 / 2., -f2 * f1, w, is_event, at_risk_length);
+        const double neg_second_d = - w * T::second_d(c, offset, at_risk_length);
 
         a -= (p_dat.LR * (f2 - c) * f1) * inter_vec;
         sym_mat_rank_one_update(
@@ -239,10 +203,6 @@ void SMA<T>::solve(){
 
       V = L_inv.t() * L_inv;
     }
-
-#ifdef USE_OPEN_BLAS
-    openblas_set_num_threads(p_dat.n_threads);
-#endif
 
     if(a.has_inf() || a.has_nan()){
       Rcpp::stop("ddhazard_fit_cpp estimation error: State vector in correction step has nan or inf elements in in bin " +

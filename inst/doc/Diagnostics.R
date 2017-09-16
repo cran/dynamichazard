@@ -27,7 +27,7 @@ knitr::knit_hooks$set(output = function(x, options) {
  })
 
 knitr::opts_chunk$set(echo = TRUE, warning = F, message = F, 
-                      dpi = 144, cache = T, dev = "png")
+                      dpi = 100, cache = T, dev = "png")
 knitr::opts_knit$set(warning = F, message = F)
 options(digits = 3)
 
@@ -105,7 +105,8 @@ library(dynamichazard)
 dd_rossi <- ddhazard(
   Surv(start, stop, event) ~ fin + age + prio + employed.cumsum, 
   data = Rossi, id = Rossi$id, by = 1, max_T = 52, 
-  Q_0 = diag(10000, 5), Q = diag(.1, 5))
+  Q_0 = diag(10000, 5), Q = diag(.1, 5),
+  control = list(eps = .001))
 
 ## ------------------------------------------------------------------------
 plot(dd_rossi)
@@ -156,7 +157,7 @@ is_large <-
   names(head(sort(max_hat, decreasing = T), 5))
 
 # Plot hat values
-plot(range(hats_stacked$interval_n), c(0, 0.22), type = "n",
+plot(range(hats_stacked$interval_n), c(0, 0.07), type = "n",
      xlab = "Interval number", ylab = "Hat value")
 
 invisible(
@@ -196,7 +197,8 @@ plot(as.numeric(names(tmp)), c(tmp), ylab = "frequency", type = "h",
 dd_rossi_trans <- ddhazard(
   Surv(start, stop, event) ~ fin + age + log(prio + 1) + employed.cumsum, 
   data = Rossi, id = Rossi$id, by = 1, max_T = 52, 
-  Q_0 = diag(10000, 5), Q = diag(.1, 5))
+  Q_0 = diag(10000, 5), Q = diag(.1, 5), 
+  control = list(eps = .001))
 
 plot(dd_rossi_trans)
 
@@ -211,7 +213,7 @@ is_large <-
   names(head(sort(max_hat, decreasing = T), 5))
 
 # Plot hat values
-plot(range(hats_stacked$interval_n), c(0, 0.22), type = "n",
+plot(range(hats_stacked$interval_n), c(0, 0.07), type = "n",
      xlab = "Interval number", ylab = "Hat value")
 
 invisible(
@@ -280,7 +282,8 @@ summary(whas500[, c("age", "bmi", "hr", "gender",  "cvd")])
 dd_whas <- ddhazard(
   Surv(lenfol, fstat) ~ gender + age + bmi + hr + cvd,
   data = whas500, by = 100, max_T = 2000, 
-  Q_0 = diag(10000, 6), Q = diag(.1, 6))
+  Q_0 = diag(10000, 6), Q = diag(.1, 6),
+  control = list(eps = .001))
 
 plot(dd_whas)
 
@@ -288,7 +291,8 @@ plot(dd_whas)
 dd_whas <- ddhazard(
   Surv(lenfol, fstat) ~ age + bmi + hr + cvd,
   data = whas500, by = 100, max_T = 2000, 
-  Q_0 = diag(10000, 5), Q = diag(.1, 5))
+  Q_0 = diag(10000, 5), Q = diag(.1, 5), 
+  control = list(eps = .001))
 
 plot(dd_whas)
 
@@ -296,7 +300,8 @@ plot(dd_whas)
 dd_whas_no_age <- ddhazard(
   Surv(lenfol, fstat) ~ bmi + hr + cvd,   # No age
   data = whas500, by = 100, max_T = 1700, 
-  Q_0 = diag(10000, 4), Q = diag(.1, 4))
+  Q_0 = diag(10000, 4), Q = diag(.1, 4), 
+  control = list(eps = .001))
 
 plot(dd_whas_no_age)
 
@@ -450,7 +455,8 @@ head(sim_dat$res, 10)
 f1 <- ddhazard(
   Surv(tstart, tstop, event) ~ x1 + x2 + x3,
   sim_dat$res, by = 1, max_T = 20, id = sim_dat$res$id, 
-  Q_0 = diag(10000, 4), Q = diag(.1, 4))
+  Q_0 = diag(10000, 4), Q = diag(.1, 4), 
+  control = list(eps = .001))
 
 matplot(betas, col = cols, lty = 1, type = "l")
 matplot(f1$state_vecs, col = cols, lty = 2, type = "l", add = T)
@@ -491,7 +497,8 @@ for(i in 1:3){
   f1 <- ddhazard(
     Surv(tstart, tstop, event) ~ x1 + x2 + x3,
     sim_dat$res, by = 1, max_T = 20, id = sim_dat$res$id, 
-    Q_0 = diag(10000, 4), Q = diag(.1, 4))
+    Q_0 = diag(10000, 4), Q = diag(.1, 4), 
+    control = list(eps = .001))
   
   # Plot coefficients
   matplot(betas, col = cols, lty = 1, type = "l",
@@ -561,7 +568,8 @@ Rossi_sub <- Rossi[!Rossi$id %in% c(is_max, is_min), ]
 dd_rossi_tmp <- ddhazard(
   Surv(start, stop, event) ~ fin + age + prio + employed.cumsum, 
   data = Rossi_sub, id = Rossi_sub$id, by = 1, max_T = 52, 
-  Q_0 = diag(10000, 5), Q = diag(.1, 5))
+  Q_0 = diag(10000, 5), Q = diag(.1, 5), 
+  control = list(eps = .001))
 
 par(mfcol = c(2, 3))
 for(i in 1:5){
@@ -633,7 +641,8 @@ plot(whas500$lenfol, whas500$age, col = cols, pch = pchs,
 dd_whas <- ddhazard(
   Surv(lenfol, fstat) ~ age + bmi + hr + cvd,
   data = whas500, by = 100, max_T = 1700, 
-  Q_0 = diag(10000, 5), Q = diag(.1, 5))
+  Q_0 = diag(10000, 5), Q = diag(.1, 5), 
+  control = list(eps = .001))
 
 dd_whas_no_extreme <- ddhazard(
   Surv(lenfol, fstat) ~ age + bmi + hr + cvd,

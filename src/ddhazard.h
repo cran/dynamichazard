@@ -2,7 +2,7 @@
 #define DDHAZARD_H
 
 // [[Rcpp::plugins(cpp11)]]
-#include "ddhazard_problem_data.h"
+#include "problem_data.h"
 #include "arma_n_rcpp.h"
 
 inline bool is_exponential_model(std::string model){
@@ -18,14 +18,33 @@ public:
 };
 
 // Classes for EKF method
+template<typename T>
+class EKF_solver : public Solver{
+  ddhazard_data_EKF &p_dat;
+  const std::string model;
+  unsigned long const max_threads;
+
+  void parallel_filter_step(
+      arma::uvec::const_iterator first, arma::uvec::const_iterator last,
+      const arma::vec &i_a_t,
+      const bool compute_H_and_z,
+      const int bin_number,
+      const double bin_tstart, const double bin_tstop);
+
+public:
+  EKF_solver(ddhazard_data_EKF &p_, const std::string model_);
+
+  void solve();
+};
+
+template<typename T>
 class EKF_filter_worker{
-protected:
-  virtual void do_comps(const arma::uvec::const_iterator it, int i,
-                        const arma::vec &i_a_t, const bool compute_z_and_H,
-                        const int bin_number,
-                        const double bin_tstart, const double bin_tstop) = 0; // abstact method to be implemented
+  void do_comps(const arma::uvec::const_iterator it, int i,
+                const arma::vec &i_a_t, const bool compute_z_and_H,
+                const int bin_number,
+                const double bin_tstart, const double bin_tstop);
   // Variables for computations
-  problem_data_EKF &dat;
+  ddhazard_data_EKF &dat;
   arma::uvec::const_iterator first;
   const arma::uvec::const_iterator last;
   const arma::vec &i_a_t;
@@ -41,7 +60,7 @@ protected:
 
 public:
   EKF_filter_worker(
-    problem_data_EKF &p_data,
+    ddhazard_data_EKF &p_data,
     arma::uvec::const_iterator first_, const arma::uvec::const_iterator last_,
     const arma::vec &i_a_t_, const bool compute_z_and_H_,
     const int i_start_, const int bin_number_,
@@ -50,49 +69,48 @@ public:
   void operator()();
 };
 
-class EKF_helper_base{
-public:
-  virtual void parallel_filter_step(
-      arma::uvec::const_iterator first, arma::uvec::const_iterator last,
-      const arma::vec &i_a_t,
-      const bool compute_H_and_z,
-      const int bin_number,
-      const double bin_tstart, const double bin_tstop) = 0;
+struct EKF_filter_worker_calculations {
+  /* (y_{it} - h(eta)) |_{\eta = x_{it}^T \alpha_{t}} */
+  const double Y_residual;
+  /* \frac{ \dot{h}(\eta) }{ Var(\eta)+ \xi } |_{\eta = x_{it}^T \alpha_{t}} */
+  const double score_factor;
+  /* \frac{ \dot{h}(\eta)^2 }{ Var(\eta)+ \xi } |_{\eta = x_{it}^T \alpha_{t}} */
+  const double hessian_factor;
+  /* \dot{h}(\eta) */
+  const double var_inv;
+  const double z_dot_factor;
 };
 
-template<class T>
-class EKF_helper : public EKF_helper_base {
-  unsigned long const max_threads;
-  problem_data_EKF &p_data;
-
-public:
-  EKF_helper(problem_data_EKF &p_data_);
-
-  void parallel_filter_step(
-      arma::uvec::const_iterator first, arma::uvec::const_iterator last,
-      const arma::vec &i_a_t,
-      const bool compute_H_and_z,
-      const int bin_number,
-      const double bin_tstart, const double bin_tstop);
+struct EKF_logit_cals{
+  static EKF_filter_worker_calculations cal(
+      const bool do_die, const double time_outcome, const double at_risk_length,
+      const double eta, const double denom_term);
 };
 
-class EKF_solver : public Solver{
-  problem_data_EKF &p_dat;
-  const std::string model;
-
-public:
-  EKF_solver(problem_data_EKF &p_, const std::string model_);
-
-  void solve();
+struct EKF_exp_bin_cals {
+  static EKF_filter_worker_calculations cal(
+      const bool do_die, const double time_outcome, const double at_risk_length,
+      const double eta, const double denom_term);
 };
 
+struct EKF_exp_clip_cals {
+  static EKF_filter_worker_calculations  cal(
+      const bool do_die, const double time_outcome, const double at_risk_length,
+      const double eta, const double denom_term);
+};
+
+struct EKF_exp_clip_w_jump_cals{
+  static EKF_filter_worker_calculations cal(
+      const bool do_die, const double time_outcome, const double at_risk_length,
+      const double eta, const double denom_term);
+};
 
 
 
 
 // UKF
 class UKF_solver_Org : public Solver{
-  problem_data &p_dat;
+  ddhazard_data &p_dat;
   const arma::uword m;
   const double k;
   const double w_0;
@@ -116,7 +134,7 @@ class UKF_solver_Org : public Solver{
   }
 
 public:
-  UKF_solver_Org(problem_data &p_, Rcpp::Nullable<Rcpp::NumericVector> &k_);
+  UKF_solver_Org(ddhazard_data &p_, Rcpp::Nullable<Rcpp::NumericVector> &k_);
 
   void solve();
 };
@@ -128,7 +146,7 @@ public:
 template<class T>
 class UKF_solver_New : public Solver{
 protected:
-  problem_data &p_dat;
+  ddhazard_data &p_dat;
   const arma::uword m;
   const double a;
   const double k;
@@ -163,7 +181,7 @@ protected:
   }
 
 public:
-  UKF_solver_New(problem_data &p_, Rcpp::Nullable<Rcpp::NumericVector> &kappa,
+  UKF_solver_New(ddhazard_data &p_, Rcpp::Nullable<Rcpp::NumericVector> &kappa,
                  Rcpp::Nullable<Rcpp::NumericVector> &alpha,
                  Rcpp::Nullable<Rcpp::NumericVector> &beta);
 
@@ -255,11 +273,11 @@ public:
 template<class T>
 class SMA : public Solver
 {
-  problem_data &p_dat;
+  ddhazard_data &p_dat;
   std::string method;
 
 public:
-  SMA(problem_data &p_, std::string method_):
+  SMA(ddhazard_data &p_, std::string method_):
   p_dat(p_), method(method_)
   {
     if(method != "woodbury" && method != "cholesky")
@@ -292,13 +310,14 @@ public:
 template<class T>
 class GMA : public Solver
 {
-  problem_data &p_dat;
-  const signed int max_rep;
+  ddhazard_data &p_dat;
+  const unsigned int max_rep;
   const double NR_eps;
+  bool have_failed_once = false;
 
 public:
-  GMA(problem_data &p_, signed int max_rep_, double NR_eps_):
-  p_dat(p_), max_rep(max_rep_), NR_eps(NR_eps_)
+  GMA(ddhazard_data &p, signed int max_rep, double NR_eps):
+  p_dat(p), max_rep((unsigned int)max_rep), NR_eps(NR_eps)
   { };
 
   void solve();

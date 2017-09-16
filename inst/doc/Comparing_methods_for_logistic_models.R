@@ -3,7 +3,7 @@ knitr::knit_hooks$set(
   mySettings  = function(before, options, envir){
     if (before && options$mySettings){ 
       par(
-        mar = c(5, 3, 1, 1),
+        mar = c(5, 5, 1, 1),
         bty = "n",
         xaxs = "i",
         pch=16,
@@ -14,7 +14,7 @@ knitr::knit_hooks$set(
     } else if(before && options$plot_2x1){
       par(
         mfcol = c(2, 1),
-        mar = c(3, 3, 1, 1), 
+        mar = c(4, 4, 2, 2), 
         cex = .75)
     }})
 
@@ -163,28 +163,37 @@ library(dynamichazard)
 dd_fit <- ddhazard(Surv(tstart, tstop, death == 2) ~ age + edema +
                         log(albumin) + log(protime) + log(bili), pbc2,
                    id = pbc2$id, by = 100, max_T = 3600, 
-                   Q_0 = diag(rep(100000, 6)), Q = diag(rep(0.01, 6)))
+                   Q_0 = diag(100, 6), Q = diag(0.01, 6),
+                   control = list(eps = .001))
 
 plot(dd_fit)
 
 ## ---- fig.height = 4.5, mySettings=FALSE--------------------------------------
-dd_fit <- ddhazard(Surv(tstart, tstop, death == 2) ~ age + edema +
-                        log(albumin) + log(protime) + log(bili), pbc2,
-                   id = pbc2$id, by = 100, max_T = 3600,
-                   control = list(NR_eps = 0.1), # <-- tolerance in correction step
-                   Q_0 = diag(rep(1, 6)),
-                   Q = diag(rep(0.001, 6)))
+# Pre-computed sds of covariates
+sds <- c(1, 10, .2, .2, .1, 1)
+
+dd_fit <- ddhazard(
+  Surv(tstart, tstop, death == 2) ~ age + edema +
+    log(albumin) + log(protime) + log(bili), pbc2,
+  id = pbc2$id, by = 100, max_T = 3600,
+  Q_0 = diag(10 / sds), Q = diag(0.01 / sds, 6),
+  control = list(
+    eps = .001,
+    NR_eps = 0.0001, # Tolerance in correction step
+    LR = .33
+  ))
 
 # Plot result
 plot(dd_fit)
 
 ## ---- fig.height = 4.5, mySettings=FALSE--------------------------------------
-dd_fit_UKF <- ddhazard(Surv(tstart, tstop, death == 2) ~ age +
-                         edema + log(albumin) + log(protime) + log(bili), pbc2,
-                   id = pbc2$id, by = 100, max_T = 3600, 
-                   Q_0 = diag(rep(1, 6)), Q = diag(rep(0.01, 6)),
-                   control = list(method = "UKF", beta = 0, alpha = 1,
-                                  eps = 0.1, n_max = 1e4))
+dd_fit_UKF <- ddhazard(
+  Surv(tstart, tstop, death == 2) ~ age +
+         edema + log(albumin) + log(protime) + log(bili), pbc2,
+   id = pbc2$id, by = 100, max_T = 3600, 
+   Q_0 = diag(rep(1, 6)), Q = diag(rep(0.01, 6)),
+   control = list(method = "UKF", beta = 0, alpha = 1,
+                  eps = 0.1, n_max = 1e4))
 
 plot(dd_fit_UKF)
 
@@ -192,13 +201,14 @@ plot(dd_fit_UKF)
 #  # Not run
 #  tmp_file <- file("pick_some_file_name.txt")
 #  sink(tmp_file)
-#  dd_fit_UKF <- ddhazard(Surv(tstart, tstop, death == 2) ~ age +
-#                           edema + log(albumin) + log(protime) + log(bili), pbc2,
-#                     id = pbc2$id, by = 100, max_T = 3600,
-#                     Q_0 = diag(rep(1, 6)), Q = diag(rep(0.01, 6)),
-#                     control =
-#                       list(method = "UKF", beta = 0, alpha = 1,
-#                            debug = T)) # <-- prints information in each iteration
+#  dd_fit_UKF <- ddhazard(
+#    Surv(tstart, tstop, death == 2) ~ age +
+#           edema + log(albumin) + log(protime) + log(bili), pbc2,
+#     id = pbc2$id, by = 100, max_T = 3600,
+#     Q_0 = diag(rep(1, 6)), Q = diag(rep(0.01, 6)),
+#     control =
+#       list(method = "UKF", beta = 0, alpha = 1,
+#            debug = T)) # <-- prints information in each iteration
 #  sink()
 #  close(tmp_file)
 
@@ -211,9 +221,9 @@ dd_fit_UKF <- ddhazard(
     edema + log(albumin) + log(protime) + log(bili), pbc2,
   id = pbc2$id, by = 100, max_T = 3600, 
   Q_0 = diag(c(0.001, 0.00001, rep(0.001, 4))) * 100, # <-- decreased
-  Q = diag(rep(0.0001, 6)),                           # <-- decreased
+  Q = diag(0.0001, 6),                                # <-- decreased
   control = 
-    list(method = "UKF", beta = 0, alpha = 1, eps = 0.01))
+    list(method = "UKF", beta = 0, alpha = 1, eps = 0.001))
 
 plot(dd_fit_UKF)
 
@@ -222,19 +232,23 @@ set.seed(7686280) # <-- Data is permuated so we set a seed
 
 ## -----------------------------------------------------------------------------
 dd_fit_EKF <- 
-  ddhazard(Surv(tstart, tstop, death == 2) ~ age + edema +
-             log(albumin) + log(protime) + log(bili), pbc2,
-           id = pbc2$id, by = 100, max_T = 3600,
-           Q_0 = diag(rep(100000, 6)), Q = diag(rep(0.01, 6)))
+  ddhazard(
+    Surv(tstart, tstop, death == 2) ~ age + edema +
+       log(albumin) + log(protime) + log(bili), pbc2,
+    id = pbc2$id, by = 100, max_T = 3600,
+    Q_0 = diag(100, 6), Q = diag(0.01, 6),
+    control = list(eps = .001))
 
 dd_fit_SMA <- 
-  ddhazard(Surv(tstart, tstop, death == 2) ~ age + edema +
-             log(albumin) + log(protime) + log(bili), pbc2,
-           id = pbc2$id, by = 100, max_T = 3600,
-           
-           control = list(method = "SMA"), # change estimation method 
-                                                   # from default
-           Q_0 = diag(rep(100000, 6)), Q = diag(rep(0.01, 6)))
+  ddhazard(
+    Surv(tstart, tstop, death == 2) ~ age + edema +
+     log(albumin) + log(protime) + log(bili), pbc2,
+    id = pbc2$id, by = 100, max_T = 3600,
+     
+    control = list(
+       method = "SMA", # change estimation method 
+       eps = 0.001),
+    Q_0 = diag(100, 6), Q = diag(0.01, 6))
 
 ## ---- eval = FALSE------------------------------------------------------------
 #  par(mfcol = c(2, 3))
@@ -257,23 +271,14 @@ dd_fit <- ddhazard(
   Surv(tstart, tstop, death == 2) ~ ddFixed(1) + 
     ddFixed(age) + ddFixed(log(albumin)) + edema + ddFixed(log(protime)) + log(bili), 
   pbc2, id = pbc2$id, by = 100, max_T = 3600, 
-  Q_0 = diag(rep(100000, 2)), Q = diag(rep(0.001, 2)))
+  Q_0 = diag(100, 2), Q = diag(0.01, 2),
+  control = list(eps = .001))
 
 ## ---- fig.height = 5, mySettings=FALSE, plot_2x1 = TRUE-----------------------
 plot(dd_fit)
 
 ## -----------------------------------------------------------------------------
 dd_fit$fixed_effects
-
-## ---- fig.height = 5, mySettings=FALSE, plot_2x1 = TRUE-----------------------
-dd_fit <- ddhazard(
-  Surv(tstart, tstop, death == 2) ~ ddFixed(1) + 
-    ddFixed(age) + ddFixed(log(albumin)) + edema +ddFixed(log(protime)) + log(bili), 
-  pbc2, id = pbc2$id, by = 100, max_T = 3600, 
-  Q_0 = diag(rep(1, 2)), Q = diag(rep(0.0001, 2)), 
-  control = list(eps = 0.02, NR_eps = 0.1))
-
-plot(dd_fit)
 
 ## ---- echo = FALSE------------------------------------------------------------
 set.seed(3434439) # <-- Data is permuated so we set a seed
@@ -289,16 +294,17 @@ form <- Surv(tstart, tstop, death == 2) ~
 dd_fit_EKF <- 
   ddhazard(form, pbc2,
            id = pbc2$id, by = 100, max_T = 3600,
-           order = 2,            # <-- second order
-           Q_0 = diag(10000, 2), # <-- needs more elements
-           Q = 0.001)
+           order = 2,          # <-- second order
+           Q_0 = diag(100, 2), # <-- needs more elements
+           Q = 0.01, 
+           control = list(eps = .001))
 
 dd_fit_post <- 
   ddhazard(form, pbc2,
            id = pbc2$id, by = 100, max_T = 3600, 
            order = 2,
-           Q_0 = diag(10000, 2), Q = 0.001, 
-           control = list(method = "SMA"))
+           Q_0 = diag(100, 2), Q = 0.01, 
+           control = list(method = "SMA", eps = .001))
 
 ## -----------------------------------------------------------------------------
 rbind(

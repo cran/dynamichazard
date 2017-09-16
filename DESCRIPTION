@@ -1,7 +1,7 @@
 Package: dynamichazard
 Type: Package
 Title: Dynamic Hazard Models using State Space Models
-Version: 0.3.5
+Version: 0.4.0
 Authors@R: c(person("Benjamin", "Christoffersen", 
                     email = "boennecd@gmail.com", 
                     role = c("cre", "aut")),
@@ -13,12 +13,12 @@ Authors@R: c(person("Benjamin", "Christoffersen",
                     role = c("cph")),
              person("R-core", email = "R-core@R-project.org",
                     role = c("cph")))
-Description: Contains functions that lets you fit dynamic hazard models with binary 
-  outcomes using state space models. The methods are originally described in  
-  Fahrmeir (1992) <doi:10.1080/01621459.1992.10475232> and Fahrmeir (1994) 
-  <doi:10.1093/biomet/81.2.317>. The functions also provide an extension hereof where the 
-  Extended Kalman filter is replaced by an Unscented Kalman filter. Models are 
-  fitted with the regular coxph() like formula.
+Description: Contains functions that lets you fit dynamic hazard models using 
+  state space models. The first implemented model is described in Fahrmeir 
+  (1992) <doi:10.1080/01621459.1992.10475232> and Fahrmeir (1994) 
+  <doi:10.1093/biomet/81.2.317>. Extensions hereof are available where the  
+  Extended Kalman filter is replaced by an unscented Kalman filter and other 
+  options including particle filters.
 License: GPL-2
 LazyData: TRUE
 LinkingTo: Rcpp, RcppArmadillo
@@ -33,7 +33,7 @@ SystemRequirements: C++11
 URL: https://github.com/boennecd/dynamichazard
 Encoding: UTF-8
 NeedsCompilation: yes
-Packaged: 2017-07-15 11:30:54 UTC; boennecd
+Packaged: 2017-09-16 14:09:13 UTC; User
 Author: Benjamin Christoffersen [cre, aut],
   Alan Miller [cph],
   Anthony Williams [cph],
@@ -41,4 +41,4 @@ Author: Benjamin Christoffersen [cre, aut],
   R-core [cph]
 Maintainer: Benjamin Christoffersen <boennecd@gmail.com>
 Repository: CRAN
-Date/Publication: 2017-07-15 12:11:36 UTC
+Date/Publication: 2017-09-16 18:57:46 UTC

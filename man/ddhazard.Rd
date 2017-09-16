@@ -30,7 +30,7 @@ ddhazard(formula, data, model = "logit", by, max_T, id, a_0, Q_0, Q = Q_0,
 
 \item{weights}{Weights to use if e.g. a skewed sample is used}
 
-\item{control}{List of control variables (see details below)}
+\item{control}{List of control variables (see the control section below)}
 
 \item{verbose}{\code{TRUE} if you want status messages during execution}
 }
@@ -83,6 +83,7 @@ The \code{control} argument allows you to pass a \code{list} to select additiona
 \item{\code{save_risk_set}}{\code{TRUE} if you want to save the list from \code{\link{get_risk_obj}} used to estimate the model. It may be needed for later call to \code{residuals}, \code{plot} and \code{logLike}. Can be set to \code{FALSE} to save memory}
 \item{\code{save_data}}{\code{TRUE} if you want to save the list \code{data} argument. It may be needed for later call to \code{residuals}, \code{plot} and \code{logLike}. Can be set to \code{FALSE} to save memory}
 \item{\code{denom_term}}{Term added to denominators in either the EKF or UKF}
+\item{\code{n_threads}}{Maximum number of threads to use.}
 \item{\code{fixed_parems_start}}{Starting value for fixed terms}
 \item{\code{fixed_terms_method}}{The method used to estimate the fixed effects. Either \code{'M_step'} or \code{'E_step'} for estimation in the M-step or E-step respectively}
 \item{\code{Q_0_term_for_fixed_E_step}}{The diagonal value of the initial covariance matrix, \code{Q_0}, for the fixed effects if fixed effects are estimated in the E-step}

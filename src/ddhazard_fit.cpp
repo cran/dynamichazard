@@ -70,10 +70,6 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
     Rcpp::stop("risk_obj has 'is_for_discrete_model' = false which should be true for model '" + model  +"'");
   }
 
-#ifdef USE_OPEN_BLAS
-  openblas_set_num_threads(std::max(n_threads, 1));
-#endif
-
   // Declare non constants and intialize some of them
   double delta_t, test_max_diff;
   const double Q_warn_eps = sqrt(std::numeric_limits<double>::epsilon());
@@ -89,11 +85,11 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
   const arma::ivec is_event_in_bin = Rcpp::as<arma::ivec>(risk_obj["is_event_in"]);
 
   // Intialize the solver for the E-step
-  std::unique_ptr<problem_data> p_data;
+  std::unique_ptr<ddhazard_data> p_data;
   std::unique_ptr<Solver> solver;
 
   if(method == "EKF"){
-    p_data.reset(new problem_data_EKF(
+    p_data.reset(new ddhazard_data_EKF(
       n_fixed_terms_in_state_vec,
       X, fixed_terms, tstart, tstop, is_event_in_bin,
       a_0, fixed_parems_start, Q_0, Q,
@@ -103,13 +99,30 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
       n_max, eps, verbose,
       order_, est_Q_0, model != "logit", NR_it_max, debug, n_threads,
       denom_term, use_pinv, criteria, EKF_batch_size));
-    solver.reset(new EKF_solver(static_cast<problem_data_EKF &>(*p_data.get()), model));
+    if(model == "logit"){
+      solver.reset(new EKF_solver<EKF_logit_cals>(
+          static_cast<ddhazard_data_EKF &>(*p_data.get()), model));
+
+    } else if (model == "exp_bin"){
+      solver.reset(new EKF_solver<EKF_exp_bin_cals>(
+          static_cast<ddhazard_data_EKF &>(*p_data.get()), model));
+
+    } else if(model == "exp_clip_time"){
+      solver.reset(new EKF_solver<EKF_exp_clip_cals>(
+          static_cast<ddhazard_data_EKF &>(*p_data.get()), model));
+
+    } else if(model == "exp_clip_time_w_jump"){
+      solver.reset(new EKF_solver<EKF_exp_clip_w_jump_cals>(
+          static_cast<ddhazard_data_EKF &>(*p_data.get()), model));
+
+    } else
+      Rcpp::stop("EKF is not implemented for model '" + model  +"'");
 
   } else if (method == "UKF"){
     if(model != "logit" &&
        !is_exponential_model(model))
       Rcpp::stop("UKF is not implemented for model '" + model  +"'");
-    p_data.reset(new problem_data(
+    p_data.reset(new ddhazard_data(
       n_fixed_terms_in_state_vec,
       X, fixed_terms, tstart, tstop, is_event_in_bin,
       a_0, fixed_parems_start, Q_0, Q,
@@ -138,7 +151,7 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
     if(model != "logit")
       Rcpp::stop("UKF is not implemented for model '" + model  +"'");
 
-    p_data.reset(new problem_data(
+    p_data.reset(new ddhazard_data(
       n_fixed_terms_in_state_vec,
       X, fixed_terms, tstart, tstop, is_event_in_bin,
       a_0, fixed_parems_start, Q_0, Q,
@@ -155,7 +168,7 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
     solver.reset(new UKF_solver_Org(*p_data.get(), kappa));
 
   } else if (method == "SMA"){
-    p_data.reset(new problem_data(
+    p_data.reset(new ddhazard_data(
         n_fixed_terms_in_state_vec,
         X, fixed_terms, tstart, tstop, is_event_in_bin,
         a_0, fixed_parems_start, Q_0, Q,
@@ -174,7 +187,7 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
       Rcpp::stop("Model '", model ,"' is not implemented with rank one posterior approximation");
 
   } else if (method == "GMA"){
-    p_data.reset(new problem_data(
+    p_data.reset(new ddhazard_data(
         n_fixed_terms_in_state_vec,
         X, fixed_terms, tstart, tstop, is_event_in_bin,
         a_0, fixed_parems_start, Q_0, Q,
@@ -222,7 +235,7 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
       my_debug_logger(*p_data)
         << "##########################################";
       my_debug_logger(*p_data)
-        <<"Starting iteration " << it << " with the following values";
+        << "Starting iteration " << it << " with the following values";
       my_print(*p_data, p_data->a_t_t_s.col(0), "a_0");
       my_print(*p_data, p_data->Q, "Q");
     }
@@ -446,30 +459,4 @@ Rcpp::List ddhazard_fit_cpp(arma::mat &X, arma::mat &fixed_terms, // Key: assume
                             Rcpp::Named("conv_values") = conv_values,
                             Rcpp::Named("Q") = Rcpp::wrap(Q),
                             Rcpp::Named("Q_0") = Rcpp::wrap(Q_0)));
-}
-
-
-// Exported for test only
-// It is here for the definition of the is_exponential_model function
-// [[Rcpp::export]]
-void bigglm_updateQR_rcpp(arma::vec &D, arma::vec &rbar, arma::vec &thetab,
-                          double &ss, bool &checked, arma::vec &tol,
-                          std::string model,
-
-                          const arma::mat &X, const arma::vec &eta,
-                          const arma::vec &offset, arma::vec &y,
-                          const arma::vec &w){
-  qr_obj qr;
-  qr.D = std::shared_ptr<arma::vec>(&D, [](arma::vec*x) -> void { });
-  qr.rbar = std::shared_ptr<arma::vec>(&rbar, [](arma::vec*x) -> void { });
-  qr.thetab = std::shared_ptr<arma::vec>(&thetab, [](arma::vec*x) -> void { });
-  qr.ss = ss;
-  qr.checked = checked;
-  qr.tol = std::shared_ptr<arma::vec>(&tol, [](arma::vec*x) -> void { });
-
-  if(model == "logit"){
-    return(bigglm_updateQR_logit::update(qr, X, eta, offset, y, w));
-  } else if (is_exponential_model(model)){
-    return(bigglm_updateQR_poisson::update(qr, X, eta, offset, y, w));
-  }
 }
