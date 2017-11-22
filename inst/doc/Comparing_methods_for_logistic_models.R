@@ -135,7 +135,7 @@ spline_fit <- gam(
     s(t, bs = "cr", k = 5, by = log(bili)),
   family = binomial, data = pbc2_big_frame)
 
-## ---- fig.height = 4.5, mySettings=FALSE, fig.cap="Plots of estimated effects in the GAM model. The effective degree of freedom is noted in the parentheses on the y axis and is computed given the number knots and final tuning parameter for spline function. For instance, `s(t,2.43):age` means that the effective degrees of freedom for `age` is `2.43`"----
+## ---- fig.height = 4.5, mySettings=FALSE, fig.cap="Plots of estimated effects in the GAM model. The effective degree of freedom is noted in the parentheses on the y-axis and is computed given the number knots and final tuning parameter for spline function. For instance, `s(t,2.43):age` means that the effective degrees of freedom for `age` is `2.43`."----
 plot(spline_fit, scale = 0, page = 1, rug = F)
 
 ## -----------------------------------------------------------------------------
@@ -244,11 +244,10 @@ dd_fit_SMA <-
     Surv(tstart, tstop, death == 2) ~ age + edema +
      log(albumin) + log(protime) + log(bili), pbc2,
     id = pbc2$id, by = 100, max_T = 3600,
-     
+    Q_0 = diag(100, 6), Q = diag(0.01, 6),
     control = list(
        method = "SMA", # change estimation method 
-       eps = 0.001),
-    Q_0 = diag(100, 6), Q = diag(0.01, 6))
+       eps = 0.001))
 
 ## ---- eval = FALSE------------------------------------------------------------
 #  par(mfcol = c(2, 3))
@@ -268,7 +267,7 @@ for(i in 1:6){
 
 ## ---- warning=FALSE-----------------------------------------------------------
 dd_fit <- ddhazard(
-  Surv(tstart, tstop, death == 2) ~ ddFixed(1) + 
+  Surv(tstart, tstop, death == 2) ~ ddFixed_intercept() + 
     ddFixed(age) + ddFixed(log(albumin)) + edema + ddFixed(log(protime)) + log(bili), 
   pbc2, id = pbc2$id, by = 100, max_T = 3600, 
   Q_0 = diag(100, 2), Q = diag(0.01, 2),
@@ -286,25 +285,28 @@ set.seed(3434439) # <-- Data is permuated so we set a seed
 ## -----------------------------------------------------------------------------
 # Define formula
 form <- Surv(tstart, tstop, death == 2) ~ 
-                     ddFixed(1) + ddFixed(age) + 
+                     ddFixed_intercept() + ddFixed(age) + 
                      ddFixed(edema) + ddFixed(log(albumin)) + 
                      ddFixed(log(protime)) + log(bili)
 
 # Fit models
 dd_fit_EKF <- 
-  ddhazard(form, pbc2,
-           id = pbc2$id, by = 100, max_T = 3600,
-           order = 2,          # <-- second order
-           Q_0 = diag(100, 2), # <-- needs more elements
-           Q = 0.01, 
-           control = list(eps = .001))
+  ddhazard(form, 
+          pbc2, id = pbc2$id, by = 100, max_T = 3600, 
+ 
+          order = 2,          # <-- second order
+          Q_0 = diag(100, 2),   # <-- needs more elements
+          Q = .00001,         # <-- decreased
+          
+          control = list(eps = .001))
 
 dd_fit_post <- 
-  ddhazard(form, pbc2,
-           id = pbc2$id, by = 100, max_T = 3600, 
-           order = 2,
-           Q_0 = diag(100, 2), Q = 0.01, 
-           control = list(method = "SMA", eps = .001))
+  ddhazard(form, 
+          pbc2, id = pbc2$id, by = 100, max_T = 3600, 
+          order = 2,          
+          Q_0 = diag(100, 2), 
+          Q = .00001,         
+          control = list(eps = .001, method = "SMA"))
 
 ## -----------------------------------------------------------------------------
 rbind(

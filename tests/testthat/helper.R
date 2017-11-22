@@ -1,12 +1,13 @@
 # Run before test
 # See https://github.com/hadley/testthat/issues/544#issuecomment-260053774
 
+options(useFancyQuotes = FALSE)
+
 if(interactive()){
   library(dynamichazard); library(testthat)
 
   if(grepl("testthat$", getwd()))
-    source("../../R/test_utils.R") else
-      source("R/test_utils.R")
+    source("../../R/test_utils.R") else source("R/test_utils.R")
 
   exp_model_names <- with(environment(ddhazard), exp_model_names)
 
@@ -21,12 +22,8 @@ if(interactive()){
   # test_SMA.R
   SMA_hepler_logit_compute_length <-
     with(environment(ddhazard), SMA_hepler_logit_compute_length)
-  SMA_hepler_logit_second_d <-
-    with(environment(ddhazard), SMA_hepler_logit_second_d)
   SMA_hepler_exp_compute_length <-
     with(environment(ddhazard), SMA_hepler_exp_compute_length)
-  SMA_hepler_exp_second_d <-
-    with(environment(ddhazard), SMA_hepler_exp_second_d)
 
   # testbigglm_wrapper.R
   bigglm_updateQR_rcpp <- with(environment(ddhazard), bigglm_updateQR_rcpp)
@@ -42,48 +39,48 @@ if(interactive()){
   get_order_data_rev_exp <- with(environment(ddhazard), get_order_data_rev_exp)
   get_design_matrix <- environment(ddhazard)$get_design_matrix
 
-  # teststatic_glm.R
-  get_design_matrix <- environment(ddhazard)$get_design_matrix
-
   # test_cpp_utils.R
   lambert_W0_test <- environment(ddhazard)$lambert_W0_test
-  trunc_lp_in_exponential_dist_test <- environment(ddhazard)$trunc_lp_in_exponential_dist_test
-  trunc_lp_in_exponential_dist_test_log_eps <- environment(ddhazard)$trunc_lp_in_exponential_dist_test_log_eps
+  trunc_eta_exponential_test <- environment(ddhazard)$trunc_eta_exponential_test
+  trunc_eta_exponential_test_log_eps <- environment(ddhazard)$trunc_eta_exponential_test_log_eps
 }
 
-# hint use this regexp '\r\n\s*\[\d+\]\s' and replace with '\r\n,' followed by
-# as search for '(?<=\d)\s+(?=\d)' and replace with ','
-# or be lazy and use this function
-str_func <- function(x, n_digist = 16){
-  tmp <- capture.output(print(unname(c(x)), digits = n_digist))
-  tmp <- sapply(tmp, gsub, pattern = "\\s*\\[1\\]\\s", replacement = "", USE.NAMES = F)
-  tmp <- sapply(tmp, gsub, pattern = "\\s*\\[\\d+\\]\\s", replacement = ",\\ ", USE.NAMES = F)
-  tmp <- sapply(tmp, gsub, pattern = "(?<=(\\d)|(NA))\\s+(?=(\\d)|-|(NA))", replacement = ",\\ ", perl = T, USE.NAMES = F)
+# wrapper for expect_know_...
+qu <- quote({
+  file <- local({
+    dir <- if(!interactive()) "./previous_results/" else
+      paste0(stringr::str_match(getwd(), ".+dynamichazard"),
+             "/tests/testthat/previous_results/")
 
-  tmp <- paste0(c("c(", tmp, " )"), collapse = "")
+    paste0(dir, file)
+  })})
 
-  max_lengt <- floor(8191 * .75)
-  n_nums_before_break = floor(max_lengt / (n_digist + 4))
-  gsub(pattern = paste0("((\\d,\\ .*?){", n_nums_before_break - 1, "})(,\\ )"), replacement = "\\1,\n\\ ",
-       x = tmp, perl = T)
-}
+if(packageVersion("testthat") >= "1.0.2.9000"){
+  trace(
+    what = testthat::expect_known_value, at = 2, print = FALSE,
+    tracer = qu)
+  trace(
+    what = testthat::expect_known_output, at = 2, print = FALSE,
+    tracer = qu)
 
-get_expect_equal <- function(x, eps, file = ""){
-  op_old <- options()
-  on.exit(options(op_old))
-  options(max.print = 1e7)
+  expect_known_value <- testthat::expect_known_value
+  formals(expect_known_value)$update <- FALSE
+  expect_known_output <- testthat::expect_known_output
+  formals(expect_known_output)$update <- FALSE
 
-  arg_name <- deparse(substitute(x))
-  expects <- unlist(lapply(x, str_func))
-  tol_string = if(!missing(eps)) paste0("\n, tolerance = " , eval(bquote(.(eps)))) else ""
-  expects <- mapply(function(e, index_name)
-    paste0("expect_equal(unname(c(", arg_name, "$", index_name, ")),\n", e,
-           tol_string, ")", collapse = ""),
-    e = expects, index_name = names(expects))
+} else {
+  trace(
+    what = testthat::expect_output_file, at = 2, print = FALSE,
+    tracer = qu)
+  trace(
+    what = testthat::expect_equal_to_reference, at = 2, print = FALSE,
+    tracer = qu)
 
-  out <- paste0(c("{", paste0(expects, collapse = "\n\n"), "}\n"), collapse = "\n")
-  cat(out, file = file)
-  invisible()
+  expect_known_value <- testthat::expect_equal_to_reference
+  formals(expect_known_value)$update <- FALSE
+  expect_known_output <- testthat::expect_output_file
+  formals(expect_known_output)$update <- FALSE
+
 }
 
 # And we may aswell just save it to a file
@@ -134,6 +131,8 @@ read_to_test_get_file_w_path <- function(file_name){
 }
 
 test_if_file_exists <- function(file_name, test_expr){
+  file_name <- gsub("(^.+)(\\.RDS)$", "\\1", file_name)
+
   if(!file.exists(file_w_path <- read_to_test_get_file_w_path(file_name))){
     cat("Skipped test as", sQuote(file_w_path), "does not exists\n")
   } else
@@ -149,7 +148,10 @@ options(warn=1)
 head_neck_cancer <- get_head_neck_cancer_data()
 pbc2 <- get_pbc2_data()
 
+if(exists("pbc", envir = environment(), inherits = FALSE))
+  rm(pbc, envir = environment())
 data("pbc", package = "survival")
+pbc_org <- pbc
 pbc <- pbc[, c("id", "time", "status", "age", "edema", "bili", "protime")]
 pbc <- pbc[complete.cases(pbc), ]
 
@@ -195,34 +197,3 @@ exp_sim_500 <- get_sim(500)
 # matplot(exp_sim_500$betas, type = "l", lty = 1)
 # sum(exp_sim_500$res$event)
 # hist(exp_sim_500$res$tstop[logit_sim_500$res$event == 1])
-
-# ######
-# # Debugging what takes time
-# files <- list.files("tests/testthat")
-# files <- files[grepl("^test", files)]
-#
-# time_taken <- sapply(files, function(f){
-#   cat("Running", sQuote(f), "\n")
-#   print(out <- system.time(testthat::test_file(paste0("tests/testthat/", f))))
-#   cat("\n")
-#
-#   out
-# })
-#
-# time_taken <- t(time_taken)
-# time_taken[order(time_taken[, "elapsed"], decreasing = TRUE), ]
-# sum(time_taken[, "elapsed"])
-
-# ######
-# # To test a particular file
-# system.time(testthat::test_file("tests/testthat/testpredict.R"))
-#
-# Or use:
-# test_that <- function(desc, code){
-#   cat("\nRunning", sQuote(desc), "\n")
-#   .time <- system.time(out <- testthat::test_that(desc, code))
-#   print(.time)
-#   cat("\n")
-#
-#   out
-# }

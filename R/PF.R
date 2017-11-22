@@ -1,3 +1,7 @@
+if(getRversion() >= "2.15.1")
+  utils::globalVariables(c(".F", "L", "R", "m"))
+
+
 PF_effective_sample_size <- function(object){
   sapply(object[
     c("forward_clouds", "backward_clouds", "smoothed_clouds")],
@@ -11,24 +15,24 @@ PF_effective_sample_size <- function(object){
 #' @description Method to estimate the hyper parameters with an EM algorithm.
 #'
 #' @inheritParams ddhazard
-#' @param trace Argument to get progress information. Zero will yield no info an larger integer values will yield incrementally more information.
-#' @param model Either \code{'logit'} for binary outcomes or \code{'exponential'} for piecewise constant exponential distributed arrival times.
+#' @param trace argument to get progress information. Zero will yield no info and larger integer values will yield incrementally more information.
+#' @param model either \code{'logit'} for binary outcomes or \code{'exponential'} for piecewise constant exponential distributed arrival times.
 #'
 #' @details
-#' See the particle_filter vignette for details.
+#' See \code{vignette("Particle_filtering", "dynamichazard")} for details.
 #'
 #' @section Control:
-#' The \code{control} argument allows you to pass a \code{list} to select additional parameters. See the vignette 'ddhazard' for more information on hyper parameters. Unspecified elements of the list will yield default values
+#' The \code{control} argument allows you to pass a \code{list} to select additional parameters. See \code{vignette("Particle_filtering", "dynamichazard")} for details. Unspecified elements of the list will yield default values.
 #' \describe{
-#' \item{\code{method}}{Method for forward, backward and smoothing filter. See the particle_filter vignette for details.}
-#' \item{\code{smoother}}{Smoother to use. See the particle_filter vignette for details.}
-#' \item{\code{N_fw_n_bw}}{Number of particles to use in forward and backward filter.}
-#' \item{\code{N_first}}{Number of particles to use at time \eqn{0} and time \eqn{d + 1}.}
-#' \item{\code{N_smooth}}{Number of particles to use in particle smoother.}
-#' \item{\code{eps}}{Convergence threhshold in EM method.}
-#' \item{\code{n_max}}{Maximum number of iterations of the EM algorithm.}
-#' \item{\code{n_threads}}{Maximum number threads to use in the computations.}
-#' \item{\code{forward_backward_ESS_threshold}}{Required effective sample size to not re-sample in the particle filters.}
+#' \item{\code{method}}{method for forward, backward and smoothing filter.}
+#' \item{\code{smoother}}{smoother to use.}
+#' \item{\code{N_fw_n_bw}}{number of particles to use in forward and backward filter.}
+#' \item{\code{N_first}}{number of particles to use at time \eqn{0} and time \eqn{d + 1}.}
+#' \item{\code{N_smooth}}{number of particles to use in particle smoother.}
+#' \item{\code{eps}}{convergence threshold in EM method.}
+#' \item{\code{n_max}}{maximum number of iterations of the EM algorithm.}
+#' \item{\code{n_threads}}{maximum number threads to use in the computations.}
+#' \item{\code{forward_backward_ESS_threshold}}{required effective sample size to not re-sample in the particle filters.}
 #' \item{\code{seed}}{seed to set at the start of every EM iteration.}
 #'}
 #'
@@ -84,7 +88,7 @@ PF_EM <- function(
   control = list(),
   trace = 0){
   #####
-  # Checks
+  # checks
   if(order != 1)
     stop(sQuote('order'), " not equal to 1 is not supported")
 
@@ -100,7 +104,7 @@ PF_EM <- function(
   is_for_discrete_model <- model == "logit"
 
   #####
-  # Find design matrix
+  # find design matrix
   X_Y = get_design_matrix(formula, data)
   n_params = ncol(X_Y$X)
 
@@ -108,7 +112,7 @@ PF_EM <- function(
     stop("Fixed terms are not supported")
 
   #####
-  # Find risk set
+  # find risk set
   if(trace > 0)
     message("Finding Risk set")
   risk_set <-
@@ -122,7 +126,7 @@ PF_EM <- function(
     stop("Fixed effects are not implemented")
 
   #####
-  # Set control variables
+  # set control variables
   control_default <- list(
     eps = 1e-2,
     forward_backward_ESS_threshold = NULL,
@@ -154,7 +158,7 @@ PF_EM <- function(
   check_n_particles_expr("N_smooth")
 
   #####
-  # Find starting values at time zero
+  # find starting values at time zero
   tmp <- get_start_values(
     formula = formula, data = data, max_T = max_T,
     X_Y = X_Y, risk_set = risk_set, verbose = trace > 0,
@@ -166,20 +170,18 @@ PF_EM <- function(
   a_0 <- tmp$a_0
 
   if(length(a_0) != n_params * order)
-    stop("a_0 does not have the correct length. Its length should be ", n_params * order,
-         " but it has length ", length(a_0), " ")
+    stop("a_0 does not have the correct length. Its length should be ",
+         n_params * order, " but it has length ", length(a_0))
 
   #####
-  # Find matrices for state equation
+  # find matrices for state equation
   tmp <- get_state_eq_matrices(
     order = order, n_params = n_params, n_fixed = n_fixed,
     est_fixed_in_E = FALSE,
     Q_0 = if(missing(Q_0)) NULL else Q_0,
-    Q = if(missing(Q)) NULL else Q)
-
-  Q_0 = tmp$Q_0
-  Q = tmp$Q
-  .F = tmp$.F
+    Q = if(missing(Q)) NULL else Q,
+    a_0)
+  list2env(tmp, environment())
 
   if(trace > 0)
     report_pre_liminary_stats_before_EM(
@@ -194,10 +196,9 @@ PF_EM <- function(
     Q_0 = Q_0,
     Q = Q,
     a_0 = a_0,
-    .F = .F,
+    .F = .F, L = L, R = R, m = m,
     risk_obj = risk_set,
     n_max = control$n_max,
-    order = order,
     n_threads = control$n_threads,
     N_fw_n_bw = control$N_fw_n_bw,
     N_smooth = control$N_smooth,
@@ -223,10 +224,9 @@ PF_EM <- function(
   Q_0,
   Q,
   a_0,
-  .F,
+  .F, L, R, m,
   risk_obj,
   n_max,
-  order,
   n_threads,
   N_fw_n_bw,
   N_smooth,
@@ -268,7 +268,7 @@ PF_EM <- function(
     log_like_max <- max(log_like, log_like_max)
 
     #####
-    # Find clouds
+    # find clouds
     set.seed(seed)
     clouds <- eval(fit_call, envir = parent.frame())
 
@@ -283,7 +283,7 @@ PF_EM <- function(
     }
 
     #####
-    # Update parameters
+    # update parameters
     a_0_old <- eval(fit_call$a_0, environment())
     Q_old <- eval(fit_call$Q, environment())
 
@@ -298,21 +298,21 @@ PF_EM <- function(
     fit_call$Q <- Q
 
     #####
-    # Compute log likelihood and check for convergernce
+    # compute log likelihood and check for convergernce
     log_like <- logLik(clouds)
     log_likes[i] <- log_like
 
     if(trace > 0)
       cat("The log likelihood in iteration ", i, " is ", log_like,
-          ". Largest log likelihood before this iteration is ", log_like_max, "\n", sep = "")
+          ". Largest log likelihood before this iteration is ", log_like_max,
+          "\n", sep = "")
 
     Q_relative_norm <- norm(Q_old - Q) / (norm(Q_old) + 1e-8)
     a_0_relative_norm <- norm(t(a_0 - a_0_old)) / (norm(t(a_0_old)) + 1e-8)
 
     if(trace > 0)
       cat("The relative norm of the change in a_0 and Q are",
-          a_0_relative_norm, "and", Q_relative_norm,
-          "at iteration", i)
+          a_0_relative_norm, "and", Q_relative_norm, "at iteration", i)
 
     if(has_converged <-
        Q_relative_norm < eps &&

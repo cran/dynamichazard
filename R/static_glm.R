@@ -1,31 +1,44 @@
-#' @title Static GLM fit for survival models
-#' @description Function used to get design matrix and weights for a static fit for survivals models where observations are binned into intervals
+#' @title Get \code{data.frame} for discrete time survival models
+#' @description Function used to get \code{data.frame} with weights for a static fit for survivals.
 #'
-#' @param formula \code{\link[survival]{coxph}} like formula with \code{\link[survival]{Surv}(tstart, tstop, event)} on the left hand site of \code{~}
-#' @param data Data frame or environment containing the outcome and co-variates
-#' @param by Length of each intervals that cases are binned into
-#' @param max_T The end time of the last bin
-#' @param id The id for each row in \code{data}. This is important when variables are time varying
-#' @param init_weights Weights for the rows \code{data}. Useful with skewed sampling and will be used when computing the final weights
-#' @param risk_obj A pre-computed result from a \code{\link{get_risk_obj}}. Will be used to skip some computations
-#' @param use_weights \code{TRUE} if weights should be used. See details
-#' @param is_for_discrete_model \code{TRUE} if the model is for a discrete hazard model like the logistic model. Affects how deaths are included when individuals have time varying coefficients
-#' @param c_outcome,c_weights,c_end_t Alternative names to use for the added columns described in the return section. Useful if you already have a column named \code{Y}, \code{t} or \code{weights}
+#' @inheritParams ddhazard
+#' @param init_weights weights for the rows in \code{data}. Useful e.g., with skewed sampling.
+#' @param risk_obj a pre-computed result from a \code{\link{get_risk_obj}}. Will be used to skip some computations.
+#' @param use_weights \code{TRUE} if weights should be used. See details.
+#' @param is_for_discrete_model \code{TRUE} if the model is for a discrete hazard model is used like the logistic model.
+#' @param c_outcome,c_weights,c_end_t alternative names to use for the added columns described in the return section. Useful if you already have a column named \code{Y}, \code{t} or \code{weights}.
+#'
 #' @details
-#' This function is used to get the data frame for e.g. a \code{glm} fit that is comparable to a \code{\link{ddhazard}} fit in the sense that it is a static version. For example, say that we bin our time periods into \code{(0,1]}, \code{(1,2]} and \code{(2,3]}. Next, consider an individual who dies at time 2.5. He should be a control in the the first two bins and should be a case in the last bin. Thus the rows in the final data frame for this individual is \code{c(Y = 1, ..., weights = 1)} and \code{c(Y = 0, ..., weights = 2)} where \code{Y} is the outcome, \code{...} is the co-variates and \code{weights} is the weights for the regression. Consider another individual who does not die and we observe him for all three periods. Thus, he will yield one row with \code{c(Y = 0, ..., weights = 3)}
+#' This function is used to get the \code{data.frame} for e.g. a \code{glm} fit that is comparable to a \code{\link{ddhazard}} fit in the sense that it is a static version. For example, say that we bin our time periods into \code{(0,1]}, \code{(1,2]} and \code{(2,3]}. Next, consider an individual who dies at time 2.5. He should be a control in the the first two bins and should be a case in the last bin. Thus the rows in the final data frame for this individual is \code{c(Y = 1, ..., weights = 1)} and \code{c(Y = 0, ..., weights = 2)} where \code{Y} is the outcome, \code{...} is the co-variates and \code{weights} is the weights for the regression. Consider another individual who does not die and we observe him for all three periods. Thus, he will yield one row with \code{c(Y = 0, ..., weights = 3)}.
 #'
-#' This function use similar logic as the \code{ddhazard} for individuals with time varying co-variates (see the vignette "ddhazard" for details)
+#' This function use similar logic as the \code{ddhazard} for individuals with time varying co-variates (see the vignette \code{vignette("ddhazard", "dynamichazard")} for details).
 #'
-#' If \code{use_weights = FALSE} then the two individuals will yield three rows each. The first individual will have \code{c(Y = 0, t = 1, ..., weights = 1)}, \code{c(Y = 0, t = 2, ..., weights = 1)}, \code{c(Y = 1, t = 3, ..., weights = 1)} while the latter will have three rows \code{c(Y = 0, t = 1, ..., weights = 1)}, \code{c(Y = 0, t = 2, ..., weights = 1)}, \code{c(Y = 0, t = 3, ..., weights = 1)}. This kind of data frame is useful if you want to make a fit with e.g. \code{\link[mgcv]{gam}} function in the \code{mgcv} package as described en Tutz et. al (2016) (see reference)
+#' If \code{use_weights = FALSE} then the two previously mentioned individuals will yield three rows each. The first individual will have \code{c(Y = 0, t = 1, ..., weights = 1)}, \code{c(Y = 0, t = 2, ..., weights = 1)}, \code{c(Y = 1, t = 3, ..., weights = 1)} while the latter will have three rows \code{c(Y = 0, t = 1, ..., weights = 1)}, \code{c(Y = 0, t = 2, ..., weights = 1)}, \code{c(Y = 0, t = 3, ..., weights = 1)}. This kind of data frame is useful if you want to make a fit with e.g. \code{\link[mgcv]{gam}} function in the \code{mgcv} package as described en Tutz et. al (2016).
 #'
 #' @return
-#' Returns a data frame with the design matrix from the formula where the following is added (column names will differ if you specified them): column \code{Y} for the binary outcome, column \code{weights} for weights of each row and additional rows if applicable. A column \code{t} is added for the stop time of the bin if \code{use_weights = FALSE}
+#' Returns a \code{data.frame} where the following is added (column names will differ if you specified them): column \code{Y} for the binary outcome, column \code{weights} for weights of each row and additional rows if applicable. A column \code{t} is added for the stop time of the bin if \code{use_weights = FALSE}.
 #'
 #' @seealso
 #' \code{\link{ddhazard}}, \code{\link{static_glm}}
 #'
 #' @references
 #' Tutz, Gerhard, and Matthias Schmid. \emph{Nonparametric Modeling and Smooth Effects}. Modeling Discrete Time-to-Event Data. Springer International Publishing, 2016. 105-127.
+#'
+#' @examples
+#'library(dynamichazard)
+#'# small toy example with time-varying covariates
+#'dat <- data.frame(
+#'  id     = c(   1,    1, 2,     2),
+#'  tstart = c(   0,    4, 0,     2),
+#'  tstop  = c(   4,    6, 2,     6),
+#'  event  = c(   0,    1, 0,     0),
+#'  x1     = c(1.09, 1.29, 0, -1.16))
+#'
+#'get_survival_case_weights_and_data(
+#'  Surv(tstart, tstop, event) ~ x1, dat, by = 1, id = dat$id)$X
+#'get_survival_case_weights_and_data(
+#'  Surv(tstart, tstop, event) ~ x1, dat, by = 1, id = dat$id,
+#'  use_weights = FALSE)$X
 #'
 #' @export
 get_survival_case_weights_and_data = function(
@@ -35,24 +48,24 @@ get_survival_case_weights_and_data = function(
   c_weights = "weights",
   c_end_t = "t"){
   X_Y = get_design_matrix(formula, data, predictors = F)
-  formula <- X_Y$formula
+  formula_used <- X_Y$formula_used
   attr(data, "class") <- c("data.table", attr(data, "class"))
 
   if(missing(init_weights))
     init_weights = rep(1, nrow(data))
 
   if(any(colnames(data) == c_outcome)){
-    warning("Column called '", c_outcome, "' will be replaced")
+    warning("Column called ", sQuote(c_outcome), " will be replaced")
     data = data[, colnames(data) != c_outcome]
   }
 
   if(any(colnames(data) == c_weights)){
-    warning("Column called '", c_weights, "' will be replaced")
+    warning("Column called ", sQuote(c_weights), " will be replaced")
     data = data[, colnames(data) != c_weights]
   }
 
   if(!use_weights && any(colnames(data) == c_end_t)){
-    warning("Column called '", c_end_t, "' will be replaced")
+    warning("Column called ", sQuote(c_end_t), " will be replaced")
     data = data[, colnames(data) != c_end_t]
   }
 
@@ -109,10 +122,13 @@ get_survival_case_weights_and_data = function(
     class(X) <- "data.frame"
 
   } else {
+    # TODO: change to more general setup that does not convert all columns to
+    #       double values first
     n_rows_final <- sum(unlist(lapply(risk_obj$risk_sets, length)))
     X <- data.frame(matrix(NA, nrow = n_rows_final, ncol = 3 + ncol(data),
-                           dimnames = list(NULL, c(colnames(data),
-                                                   c_outcome, c_end_t, c_weights))))
+                           dimnames = list(
+                             NULL, c(colnames(data),
+                                     c_outcome, c_end_t, c_weights))))
 
     j <- 1
     for(i in seq_along(risk_obj$risk_sets)){
@@ -133,32 +149,40 @@ get_survival_case_weights_and_data = function(
       X[[i]] <- factor(levels(data[[i]])[X[[i]]], levels = levels(data[[i]]))
   }
 
-  list(X = X, formula = formula)
+  list(X = X, formula_used = formula_used)
 }
 
 
-#' Function to make a static glm fit
+#' @title  Static glm fit
+#' @inheritParams ddhazard
 #' @inheritParams get_survival_case_weights_and_data
-#' @param ... arguments passed to \code{\link{glm}} or \code{\link[speedglm]{speedglm}}. If \code{only_coef = TRUE} then the arguments are passed to \code{\link{glm.control}} if \code{\link{glm}} is used
-#' @param family \code{"logit"} or \code{"exponential"} for the static equivalent model of \code{\link{ddhazard}}
-#' @param model \code{TRUE} if you want to save the design matrix used in \code{\link{glm}}
-#' @param weights weights if a skewed sample or similar is used
-#' @param speedglm Depreciated.
+#' @param ... arguments passed to \code{\link{glm}} or \code{\link[speedglm]{speedglm}}. If \code{only_coef = TRUE} then the arguments are passed to \code{\link{glm.control}} if \code{\link{glm}} is used.
+#' @param family \code{"logit"} or \code{"exponential"} for a static equivalent model of \code{\link{ddhazard}}.
+#' @param model \code{TRUE} if you want to save the design matrix used in \code{\link{glm}}.
+#' @param speedglm depreciated.
 #' @param only_coef \code{TRUE} if only coefficients should be returned. This will only call the \code{\link[speedglm]{speedglm.wfit}} or \code{\link{glm.fit}} which will be faster.
 #' @param mf model matrix for regression. Needed when \code{only_coef = TRUE}
 #' @param method_use method to use for estimation. \code{\link{glm}} uses \code{\link{glm.fit}}, \code{\link[speedglm]{speedglm}} uses \code{\link[speedglm]{speedglm.wfit}} and \code{parallelglm} uses a parallel \code{C++} version \code{\link{glm.fit}} which only gives the coefficients.
 #' @param n_threads number of threads to use when \code{method_use} is \code{"parallelglm"}.
 #'
-#' @details
-#' Method to fit a static model corresponding to a \code{\link{ddhazard}} fit. The method uses weights to ease the memory requirements. See \code{\link{get_survival_case_weights_and_data}} for details on weights
+#' @description
+#' Method to fit a static model corresponding to a \code{\link{ddhazard}} fit. The method uses weights to ease the memory requirements. See \code{\link{get_survival_case_weights_and_data}} for details on weights.
 #'
 #' @return
-#' The returned list from the \code{\link{glm}} call or just coefficients depending on the value of \code{only_coef}
+#' The returned list from the \code{\link{glm}} call or just coefficients depending on the value of \code{only_coef}.
+#'
+#' @examples
+#'library(dynamichazard)
+#'fit <- static_glm(
+#'  Surv(time, status == 2) ~ log(bili), pbc, id = pbc$id, max_T = 3600,
+#'  by = 50)
+#'fit$coefficients
 #'
 #' @export
 static_glm = function(
-  formula, data, by, max_T, ..., id, family = "logit", model = F, weights, risk_obj = NULL,
-  speedglm = F, only_coef = FALSE, mf, method_use = c("glm", "speedglm", "parallelglm"),
+  formula, data, by, max_T, ..., id, family = "logit", model = F, weights,
+  risk_obj = NULL, speedglm = F, only_coef = FALSE, mf,
+  method_use = c("glm", "speedglm", "parallelglm"),
   n_threads = getOption("ddhazard_max_threads")){
   if(only_coef && missing(mf))
     stop("mf must be supplied when only_coef = TRUE")
@@ -167,13 +191,13 @@ static_glm = function(
     stop("data and mf must have the same number of rows")
 
   if(speedglm)
-    warning(sQuote("speedglm"), " have been depreciated. Use ", sQuote("method_use"))
+    warning(sQuote("speedglm"), " have been depreciated. Use ",
+            sQuote("method_use"))
 
-  if(length(method_use) > 1)
-    method_use <- method_use[1]
+  method_use <- method_use[1]
 
   if(only_coef){
-    # We mark the row numbers as some may be removed and the order may be
+    # we mark the row numbers as some may be removed and the order may be
     # changed
     col_for_row_n <- ncol(data) + 1
     data[[col_for_row_n]] <- 1:nrow(data)
@@ -187,14 +211,12 @@ static_glm = function(
       formula = formula, data = data, by = by, max_T = max_T, id = id,
       init_weights = weights, risk_obj = risk_obj)
 
-    formula <- tmp$formula
+    formula <- tmp$formula_used
     X <- tmp$X
     rm(tmp)
 
     data <- X
     formula <- update(formula, Y ~ ., data = data)
-    formula <- terms(formula, data = data, specials = ddfixed_specials)
-    class(formula) <- c("ddformula", class(formula))
 
   } else if(family == "exponential"){
     family <- poisson()
@@ -202,7 +224,7 @@ static_glm = function(
     X_Y = get_design_matrix(formula, data)
     X_Y$X <- X_Y$X[, -1] # remove the intercept
 
-    formula <- X_Y$formula
+    formula <- X_Y$formula_used
 
     is_before_max_T <- X_Y$Y[, 1] < max_T
     data <- data[is_before_max_T, ]
@@ -215,8 +237,6 @@ static_glm = function(
 
     data <- X
     formula <- update(formula, Y ~ . + offset(log_delta_time), data = data)
-    formula <- terms(formula, data, specials = ddfixed_specials)
-    class(formula) <- c("ddformula", class(formula))
 
   } else
     stop("family '", family, "' not implemented in static_glm")
@@ -248,13 +268,17 @@ static_glm = function(
     if(only_coef){
       ctrl <- do.call(glm.control, list(...))
 
-      fit <- glm.fit(x = mf, y = data$Y, weights = data$weights,
-                     family = family, control = ctrl, offset = offset)
+      fit <- eval(bquote(
+        glm.fit(x = mf, y = data$Y, weights = data$weights,
+                family = family, control = .(ctrl), offset = offset)))
 
       return(fit$coefficients)
     }
 
-    return(glm(formula = formula, data = data, family = family, model = model, weights = weights, ...))
+    return(eval(bquote(
+      glm(formula = .(formula), data = data,
+          family = family, model = model,
+          weights = weights, ...))))
 
   } else if(method_use == "parallelglm" && only_coef){
     epsilon <- list(...)$epsilon

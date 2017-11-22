@@ -27,7 +27,7 @@ knitr::knit_hooks$set(output = function(x, options) {
  })
 
 knitr::opts_chunk$set(echo = TRUE, warning = F, message = F, 
-                      dpi = 100, cache = T, dev = "png")
+                      dpi = 100, cache = FALSE, dev = "png")
 knitr::opts_knit$set(warning = F, message = F)
 options(digits = 3)
 
@@ -105,8 +105,8 @@ library(dynamichazard)
 dd_rossi <- ddhazard(
   Surv(start, stop, event) ~ fin + age + prio + employed.cumsum, 
   data = Rossi, id = Rossi$id, by = 1, max_T = 52, 
-  Q_0 = diag(10000, 5), Q = diag(.1, 5),
-  control = list(eps = .001))
+  Q_0 = diag(10000, 5), Q = diag(.01, 5),
+  control = list(eps = .001, n_max = 250))
 
 ## ------------------------------------------------------------------------
 plot(dd_rossi)
@@ -115,7 +115,7 @@ plot(dd_rossi)
 hats <- hatvalues(dd_rossi)
 
 ## ------------------------------------------------------------------------
-str(hats[1:3]) # Print str of first three matrices
+str(hats[1:3]) # str of first three elements 
 head(hats[[1]], 10) # Print the head of first matrix
 
 ## ----stack_hats, echo = FALSE--------------------------------------------
@@ -157,7 +157,7 @@ is_large <-
   names(head(sort(max_hat, decreasing = T), 5))
 
 # Plot hat values
-plot(range(hats_stacked$interval_n), c(0, 0.07), type = "n",
+plot(range(hats_stacked$interval_n), c(0, 0.03), type = "n",
      xlab = "Interval number", ylab = "Hat value")
 
 invisible(
@@ -197,8 +197,8 @@ plot(as.numeric(names(tmp)), c(tmp), ylab = "frequency", type = "h",
 dd_rossi_trans <- ddhazard(
   Surv(start, stop, event) ~ fin + age + log(prio + 1) + employed.cumsum, 
   data = Rossi, id = Rossi$id, by = 1, max_T = 52, 
-  Q_0 = diag(10000, 5), Q = diag(.1, 5), 
-  control = list(eps = .001))
+  Q_0 = diag(10000, 5), Q = diag(.01, 5), 
+  control = list(eps = .001, n_max = 250))
 
 plot(dd_rossi_trans)
 
@@ -213,7 +213,7 @@ is_large <-
   names(head(sort(max_hat, decreasing = T), 5))
 
 # Plot hat values
-plot(range(hats_stacked$interval_n), c(0, 0.07), type = "n",
+plot(range(hats_stacked$interval_n), c(0, 0.03), type = "n",
      xlab = "Interval number", ylab = "Hat value")
 
 invisible(
@@ -234,12 +234,14 @@ invisible(
 f1 <- ddhazard(
   Surv(start, stop, event) ~ fin + age + prio + employed.cumsum, 
   data = Rossi, id = Rossi$id, by = 1, max_T = 52, 
-  Q_0 = diag(10000, 5), Q = diag(.1, 5))
+  Q_0 = diag(10000, 5), Q = diag(.01, 5), 
+  control = list(eps = .001, n_max = 250))
 
 f2 <- ddhazard(
   Surv(start, stop, event) ~ fin + age + log(prio + 1) + employed.cumsum , 
   data = Rossi, id = Rossi$id, by = 1, max_T = 52, 
-  Q_0 = diag(10000, 5), Q = diag(.1, 5))
+  Q_0 = diag(10000, 5), Q = diag(.01, 5), 
+  control = list(eps = .001, n_max = 250))
 
 # Compute residuals
 res1 <- residuals(f1, type = "pearson")
@@ -254,12 +256,8 @@ log_error2 <- unlist(
     ifelse(x[, "Y"] == 1, log(x[, "p_est"]), log(1 - x[, "p_est"]))))
 
 # Compare mean
-mean(log_error1) # Mean error for first model
-mean(log_error2) # Mean error for second model
-
-## ------------------------------------------------------------------------
-summary(log_error1)
-summary(log_error2)
+print(c(res1 = mean(log_error1), res2 = mean(log_error2)),
+      digits = 8)
 
 ## ------------------------------------------------------------------------
 load("Diagnostics/whas500.RData")
@@ -320,10 +318,10 @@ head(obs_res$residuals[[1]])
 
 ## ----stack_res, echo = FALSE---------------------------------------------
 stack_residuals <- function(fit, resids){
-  if(!inherits(resids, "fahrmeier_94_res"))
-    stop("Residuals must have class 'fahrmeier_94_res'")
-  if(!inherits(fit, "fahrmeier_94"))
-    stop("fit must have class 'fahrmeier_94'")
+  if(!inherits(resids, "ddhazard_residual"))
+    stop("Residuals must have class 'ddhazard_residual'")
+  if(!inherits(fit, "ddhazard"))
+    stop("fit must have class 'ddhazard'")
   
   # Stack the residuals
   resids_stacked <- 
@@ -516,68 +514,6 @@ for(i in 1:3){
 
 
 ## ------------------------------------------------------------------------
-obs_res <- residuals(dd_rossi, type = "pearson")
-
-## ------------------------------------------------------------------------
-# Stack residuals
-resids_stacked <- stack_residuals(fit = dd_rossi, resids = obs_res)
-
-# Compute cummulated residuals
-resids_stacked$residuals_cum <- unlist(tapply(
-  resids_stacked$residuals, resids_stacked$id, cumsum))
-
-# Plot the cumulated residuals for each individual
-plot(c(1, 52), range(resids_stacked$residuals_cum), type = "n", 
-     xlab = "Interval number", ylab = "Cumulated Person residuals")
-invisible(
-  tapply(resids_stacked$residuals_cum, resids_stacked$id, lines, 
-         col = gray(0, alpha = .2)))
-
-## ------------------------------------------------------------------------
-max_cum <- tapply(resids_stacked$residuals_cum, resids_stacked$id, max)
-
-is_max <- names(max_cum)[order(max_cum, decreasing = T)[1:5]]
-is_max # Id of the those with the largest values
-
-## ------------------------------------------------------------------------
-Rossi_max_subset <- Rossi[Rossi$id %in% is_max, ]
-Rossi_max_subset <- Rossi_max_subset[nrow(Rossi_max_subset):1, ]
-Rossi_max_subset[!duplicated(Rossi_max_subset$id), ]
-
-## ------------------------------------------------------------------------
-age <- Rossi$age[!duplicated(Rossi$id)]
-hist(age, breaks = 20)
-
-## ------------------------------------------------------------------------
-summary(Rossi$prio[!duplicated(Rossi$id)])
-
-## ------------------------------------------------------------------------
-min_cum <- tapply(resids_stacked$residuals_cum, resids_stacked$id, min)
-
-is_min <- names(min_cum)[order(min_cum)[1:5]]
-is_min
-
-# We print the last record each of these
-Rossi_min_subset <- Rossi[Rossi$id %in% is_min, ]
-Rossi_min_subset <- Rossi_min_subset[nrow(Rossi_min_subset):1, ]
-Rossi_min_subset[!duplicated(Rossi_min_subset$id), ]
-
-## ------------------------------------------------------------------------
-Rossi_sub <- Rossi[!Rossi$id %in% c(is_max, is_min), ]
-
-dd_rossi_tmp <- ddhazard(
-  Surv(start, stop, event) ~ fin + age + prio + employed.cumsum, 
-  data = Rossi_sub, id = Rossi_sub$id, by = 1, max_T = 52, 
-  Q_0 = diag(10000, 5), Q = diag(.1, 5), 
-  control = list(eps = .001))
-
-par(mfcol = c(2, 3))
-for(i in 1:5){
-  plot(dd_rossi, cov_index = i)
-  plot(dd_rossi_tmp, cov_index = i, col = "red", add = T)
-}
-
-## ------------------------------------------------------------------------
 hats <- hatvalues(dd_whas)
 hats_stacked <- stack_hats(hats)
 
@@ -679,10 +615,10 @@ for(i in 1:5){
 
 ## ----stack_res, eval = FALSE---------------------------------------------
 #  stack_residuals <- function(fit, resids){
-#    if(!inherits(resids, "fahrmeier_94_res"))
-#      stop("Residuals must have class 'fahrmeier_94_res'")
-#    if(!inherits(fit, "fahrmeier_94"))
-#      stop("fit must have class 'fahrmeier_94'")
+#    if(!inherits(resids, "ddhazard_residual"))
+#      stop("Residuals must have class 'ddhazard_residual'")
+#    if(!inherits(fit, "ddhazard"))
+#      stop("fit must have class 'ddhazard'")
 #  
 #    # Stack the residuals
 #    resids_stacked <-

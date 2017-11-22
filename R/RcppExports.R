@@ -5,8 +5,8 @@ bigglm_regcf_rcpp <- function(D, rbar, thetab, ss, checked, tol) {
     .Call(`_dynamichazard_bigglm_regcf_rcpp`, D, rbar, thetab, ss, checked, tol)
 }
 
-ddhazard_fit_cpp <- function(X, fixed_terms, weights, tstart, tstop, a_0, fixed_parems_start, Q_0, Q, risk_obj, F_, eps_fixed_parems, max_it_fixed_params, n_max = 100L, eps = 0.001, verbose = 0L, order_ = 1L, est_Q_0 = TRUE, method = "EKF", kappa = NULL, alpha = NULL, beta = NULL, NR_eps = NULL, LR = NULL, model = "logit", M_step_formulation = "Fahrmier94", fixed_effect_chunk_size = 2e4L, debug = FALSE, NR_it_max = 100L, n_threads = -1L, denom_term = .0001, n_fixed_terms_in_state_vec = 0L, use_pinv = FALSE, criteria = "delta_coef", posterior_version = "cholesky", GMA_max_rep = 10L, GMA_NR_eps = 0.1, EKF_batch_size = 5000L) {
-    .Call(`_dynamichazard_ddhazard_fit_cpp`, X, fixed_terms, weights, tstart, tstop, a_0, fixed_parems_start, Q_0, Q, risk_obj, F_, eps_fixed_parems, max_it_fixed_params, n_max, eps, verbose, order_, est_Q_0, method, kappa, alpha, beta, NR_eps, LR, model, M_step_formulation, fixed_effect_chunk_size, debug, NR_it_max, n_threads, denom_term, n_fixed_terms_in_state_vec, use_pinv, criteria, posterior_version, GMA_max_rep, GMA_NR_eps, EKF_batch_size)
+ddhazard_fit_cpp <- function(X, fixed_terms, weights, tstart, tstop, a_0, fixed_parems_start, R, L, m, Q_0, Q, risk_obj, F_, eps_fixed_parems, max_it_fixed_params, n_max = 100L, eps = 0.001, verbose = 0L, est_Q_0 = TRUE, method = "EKF", kappa = NULL, alpha = NULL, beta = NULL, NR_eps = NULL, LR = NULL, model = "logit", M_step_formulation = "Fahrmier94", fixed_effect_chunk_size = 2e4L, debug = FALSE, NR_it_max = 100L, n_threads = -1L, denom_term = .0001, n_fixed_terms_in_state_vec = 0L, use_pinv = FALSE, criteria = "delta_coef", posterior_version = "cholesky", GMA_max_rep = 10L, GMA_NR_eps = 0.1, EKF_batch_size = 5000L) {
+    .Call(`_dynamichazard_ddhazard_fit_cpp`, X, fixed_terms, weights, tstart, tstop, a_0, fixed_parems_start, R, L, m, Q_0, Q, risk_obj, F_, eps_fixed_parems, max_it_fixed_params, n_max, eps, verbose, est_Q_0, method, kappa, alpha, beta, NR_eps, LR, model, M_step_formulation, fixed_effect_chunk_size, debug, NR_it_max, n_threads, denom_term, n_fixed_terms_in_state_vec, use_pinv, criteria, posterior_version, GMA_max_rep, GMA_NR_eps, EKF_batch_size)
 }
 
 sample_indices_test <- function(size, probs) {
@@ -25,24 +25,16 @@ dmvnrm_log_test <- function(x, mean, sigma_chol_inv) {
     .Call(`_dynamichazard_dmvnrm_log_test`, x, mean, sigma_chol_inv)
 }
 
-bigglm_updateQR_rcpp <- function(D, rbar, thetab, ss, checked, tol, model, X, eta, offset, y, w) {
-    invisible(.Call(`_dynamichazard_bigglm_updateQR_rcpp`, D, rbar, thetab, ss, checked, tol, model, X, eta, offset, y, w))
+bigglm_updateQR_rcpp <- function(D, rbar, thetab, ss, checked, tol, model, X, eta, offset, at_risk_length, y, w) {
+    invisible(.Call(`_dynamichazard_bigglm_updateQR_rcpp`, D, rbar, thetab, ss, checked, tol, model, X, eta, offset, at_risk_length, y, w))
 }
 
 SMA_hepler_logit_compute_length <- function(offset, coef1, coef2, w, y) {
     .Call(`_dynamichazard_SMA_hepler_logit_compute_length`, offset, coef1, coef2, w, y)
 }
 
-SMA_hepler_logit_second_d <- function(c, offset) {
-    .Call(`_dynamichazard_SMA_hepler_logit_second_d`, c, offset)
-}
-
 SMA_hepler_exp_compute_length <- function(offset, coef1, coef2, w, y, length) {
     .Call(`_dynamichazard_SMA_hepler_exp_compute_length`, offset, coef1, coef2, w, y, length)
-}
-
-SMA_hepler_exp_second_d <- function(c, offset, length) {
-    .Call(`_dynamichazard_SMA_hepler_exp_second_d`, c, offset, length)
 }
 
 PF_cloud_to_rcpp_and_back <- function(rcpp_list) {
@@ -77,15 +69,15 @@ lambert_W0_test <- function(x) {
     .Call(`_dynamichazard_lambert_W0_test`, x)
 }
 
-trunc_lp_in_exponential_dist_test <- function(eta, at_risk_length, is_event) {
-    .Call(`_dynamichazard_trunc_lp_in_exponential_dist_test`, eta, at_risk_length, is_event)
+trunc_eta_exponential_test <- function(eta, at_risk_length, is_event) {
+    .Call(`_dynamichazard_trunc_eta_exponential_test`, eta, at_risk_length, is_event)
 }
 
-trunc_lp_in_exponential_dist_test_log_eps <- function() {
-    .Call(`_dynamichazard_trunc_lp_in_exponential_dist_test_log_eps`)
+trunc_eta_exponential_test_log_eps <- function() {
+    .Call(`_dynamichazard_trunc_eta_exponential_test_log_eps`)
 }
 
-logLike_cpp <- function(X, risk_obj, F, Q_0, Q, a_t_d_s, tstart, tstop, fixed_effects_offsets, order_ = 1L, model = "logit") {
+logLike_cpp <- function(X, risk_obj, F, Q_0, Q, a_t_d_s, tstart, tstop, fixed_effects_offsets, order_, model) {
     .Call(`_dynamichazard_logLike_cpp`, X, risk_obj, F, Q_0, Q, a_t_d_s, tstart, tstop, fixed_effects_offsets, order_, model)
 }
 
@@ -93,8 +85,8 @@ parallelglm <- function(X, Ys, family, beta0, weights, offsets, tol = 1e-8, nthr
     .Call(`_dynamichazard_parallelglm`, X, Ys, family, beta0, weights, offsets, tol, nthreads, it_max, trace)
 }
 
-PF_smooth <- function(n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, Q_0, Q, Q_tilde, risk_obj, F, n_max, order, n_threads, N_fw_n_bw, N_smooth, forward_backward_ESS_threshold, debug, N_first, method, smoother, model) {
-    .Call(`_dynamichazard_PF_smooth`, n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, Q_0, Q, Q_tilde, risk_obj, F, n_max, order, n_threads, N_fw_n_bw, N_smooth, forward_backward_ESS_threshold, debug, N_first, method, smoother, model)
+PF_smooth <- function(n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, L, m, Q_0, Q, Q_tilde, risk_obj, F, n_max, n_threads, N_fw_n_bw, N_smooth, forward_backward_ESS_threshold, debug, N_first, method, smoother, model) {
+    .Call(`_dynamichazard_PF_smooth`, n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, L, m, Q_0, Q, Q_tilde, risk_obj, F, n_max, n_threads, N_fw_n_bw, N_smooth, forward_backward_ESS_threshold, debug, N_first, method, smoother, model)
 }
 
 compute_summary_stats <- function(rcpp_list, n_threads, a_0, Q, Q_0) {
@@ -103,5 +95,9 @@ compute_summary_stats <- function(rcpp_list, n_threads, a_0, Q, Q_0) {
 
 get_risk_obj_rcpp <- function(start, stop, event, by, start_order, max_T, order_by_id_and_rev_start, id, min_start, event_times_in, is_for_discrete_model = TRUE) {
     .Call(`_dynamichazard_get_risk_obj_rcpp`, start, stop, event, by, start_order, max_T, order_by_id_and_rev_start, id, min_start, event_times_in, is_for_discrete_model)
+}
+
+round_if_almost_eq <- function(x, x_ord, boundaries) {
+    .Call(`_dynamichazard_round_if_almost_eq`, x, x_ord, boundaries)
 }
 

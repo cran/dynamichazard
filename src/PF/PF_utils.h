@@ -183,7 +183,9 @@ static input_for_normal_apprx compute_mu_n_Sigma_from_normal_apprx(
     bin_start = tmp.start;
     bin_stop = tmp.stop;
 
-  }
+  } else
+    // avoid wmaybe-uninitialized
+    bin_start = bin_stop = std::numeric_limits<double>::quiet_NaN();
 
   /* Compute the terms that does not depend on the outcome */
   /* Sigma^-1 = (Q + \tilde{Q})^{-1} */
@@ -206,7 +208,8 @@ static input_for_normal_apprx compute_mu_n_Sigma_from_normal_apprx(
   if(multithread){
     lock = new omp_lock_t;
     omp_init_lock(lock);
-  }
+  } else
+    lock = nullptr;
 #pragma omp parallel if(multithread)
 {
 #endif
@@ -251,8 +254,12 @@ static input_for_normal_apprx compute_mu_n_Sigma_from_normal_apprx(
 
       }
 
-      double g = densities::log_p_prime(*it_eta, *it_is_event, at_risk_length);
-      double neg_G = - densities::log_p_2prime(*it_eta, *it_is_event, at_risk_length);
+      auto trunc_eta = densities::truncate_eta(
+        *it_is_event, *it_eta, exp(*it_eta), at_risk_length);
+      double g = densities::d_log_like(
+        *it_is_event, trunc_eta, at_risk_length);
+      double neg_G = - densities::dd_log_like(
+        *it_is_event, trunc_eta, at_risk_length);
 
       sym_mat_rank_one_update(neg_G, data.X.col(*it_r), my_Sigma_inv);
 
@@ -320,6 +327,7 @@ static input_for_normal_apprx_w_cloud_mean
 
     } else {
       Q_use = &Q;
+      mu_term = nullptr;
 
     }
 
@@ -381,6 +389,9 @@ compute_mu_n_Sigma_from_normal_apprx_w_particles(
 
   } else {
     Q_use = &Q;
+
+    // avoid wmaybe-uninitialized
+    mu_term = nullptr;
 
   }
 

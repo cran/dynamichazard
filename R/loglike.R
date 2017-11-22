@@ -1,22 +1,33 @@
-#' @title Log likelihood of smoothed state vector of a \code{fahrmeier_94} object
+#' @title Log likelihood of mean path of \code{\link{ddhazard}} object
+#'
 #' @description
 #' Computes the log likelihood of (a potentially new) data set given the estimated:
 #' \deqn{E_{\theta}(\alpha_1 | y_{1:d}), E_{\theta}(\alpha_{2} | y_{1:d}), ..., E_{\theta}(\alpha_{d} | y_{1:d})}
 #'
-#' from the \code{fahrmeier_94} class object. Note that this is not the log likelihood of the observed data given the outcome.
+#' of the \code{ddhazard} object. Note that this is not the log likelihood of the observed data given the outcome.
 #'
-#' @param object an object of class \code{fahrmeier_94}.
+#' @param object an object of class \code{ddhazard}.
 #' @param data new data to evaluate the likelihood for.
 #' @param id the individual identifiers as in \code{\link{ddhazard}}.
 #' @param ... unused.
 #'
+#' @examples
+#'library(dynamichazard)
+#'fit <- ddhazard(
+#'  Surv(time, status == 2) ~ log(bili), pbc, id = pbc$id, max_T = 3600,
+#'  Q_0 = diag(1, 2), Q = diag(1e-4, 2), by = 50,
+#'  control = list(method = "GMA"))
+#'logLik(fit)
+#'
 #' @export
-logLik.fahrmeier_94 = function(object, data = NULL, id, ...){
+logLik.ddhazard = function(object, data = NULL, id, ...){
   data <- if(!is.null(object$data)) object$data else data
   if(is.null(data))
     stop("data is needed to compute log likelihood. Please, pass the data set used in 'ddhazard' call")
 
-  X <- get_design_matrix(object$formula, data)
+  X <- get_design_matrix(
+    data = data, Terms = object$terms, xlev = object$xlev,
+    has_fixed_intercept = object$has_fixed_intercept)
   X$X <- t(X$X)
 
   fixed_effects_offsets <- if(ncol(X$fixed_terms) == 0)
@@ -37,15 +48,16 @@ logLik.fahrmeier_94 = function(object, data = NULL, id, ...){
     } else
       stop("logLik not implemented for model '", object$model, "'")
 
-    risk_obj <- get_risk_obj(Y = X$Y, by = unique(diff(object$times)),
-                             max_T = max(object$times), is_for_discrete_model = is_for_discrete_model,
-                             id = id)
+    risk_obj <- get_risk_obj(
+      Y = X$Y, by = unique(diff(object$times)), id = id,
+      max_T = max(object$times), is_for_discrete_model = is_for_discrete_model)
   }
 
-  val <- logLike_cpp(X = X$X, risk_obj = risk_obj, F = object$F_,
-                     Q_0 = object$Q_0, Q = object$Q, a_t_d_s = t(object$state_vecs),
-                     tstart = X$Y[, 1], tstop = X$Y[, 2], order_ = object$order,
-                     model = object$model, fixed_effects_offsets = fixed_effects_offsets)
+  val <- logLike_cpp(
+    X = X$X, risk_obj = risk_obj, F = object$F_,
+    Q_0 = object$Q_0, Q = object$Q, a_t_d_s = t(object$state_vecs),
+    tstart = X$Y[, 1], tstop = X$Y[, 2], order_ = object$order,
+    model = object$model, fixed_effects_offsets = fixed_effects_offsets)
 
   attr(val, "prior_loglike") <- val[2]
   val <- val[1]
@@ -53,20 +65,15 @@ logLik.fahrmeier_94 = function(object, data = NULL, id, ...){
   if(object$est_Q_0)
     warning("parameters for Q_0 are not included in attribute df")
 
-  # n_parems <- ncol(object$state_vecs) / object$order
-  # attr(val, "df") <- n_parems * object$order +  # from a_0
-  #   n_parems * (n_parems + 1) / 2 +  # from Q
-  #   length(object$fixed_effects) # from fixed effects
   class(val) <- "logLik"
-
   val
 }
 
-#' @title Log-Likelihood of a \code{PF_clouds} object
-#' @param object an object of class \code{PF_clouds}
+#' @title Log likelihood of a \code{PF_clouds} object
+#' @param object an object of class \code{PF_clouds}.
 #' @param ... unused.
 #' @description
-#' Computes the log-likelihood using the forward filter clouds. See the particle_filter vignette for details.
+#' Computes the log likelihood using the forward filter clouds. See the \code{vignette("Particle_filtering", "dynamichazard")} for details.
 #'
 #' @return
 #' The log-likelihood value given the observed data and set of parameter used when simulating the clouds.

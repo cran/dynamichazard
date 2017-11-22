@@ -1,48 +1,18 @@
 #include "../ddhazard.h"
 #include "../utils.h"
 #include "../arma_BLAS_LAPACK.h"
+#include "../family.h"
 #ifdef _OPENMP
 #include "omp.h"
 #endif
 
-inline double GMA_hepler_logit::d1(
-    const double eta, const bool is_event, const double at_risk_length){
-  if(is_event)
-    return(1 / (1 + exp(eta)));
-
-
-  const double e = exp(eta);
-  return(- e / (1 + e));
-}
-
-inline double GMA_hepler_logit::d2(
-  double eta, const double at_risk_length){
-  if(eta < -15. || eta > 15.)
-    return(0);
-
-  const double e = exp(eta);
-  return - e / pow(1. + e, 2);
-}
-
-
-
-inline double GMA_hepler_exp::d1(
-    const double eta, const bool is_event, const double at_risk_length){
-  const double e = exp(eta);
-  if(is_event){
-    return(1. - e * at_risk_length);
-  }
-
-  return(- e * at_risk_length);
-}
-
-inline double GMA_hepler_exp::d2(
-    double eta, const double at_risk_length){
-  return -  exp(eta) * at_risk_length;
-}
-
 template<class T>
 void GMA<T>::solve(){
+  const arma::vec offsets =
+    (p_dat.any_fixed_in_M_step) ?
+    p_dat.fixed_parems.t() * p_dat.fixed_terms :
+    arma::vec(p_dat.X.n_cols, arma::fill::zeros);
+
   double bin_tstop = p_dat.min_start;
 
   for (int t = 1; t < p_dat.d + 1; t++){
@@ -52,8 +22,11 @@ void GMA<T>::solve(){
     bin_tstop += delta_t;
 
     // E-step: Prediction step
-    p_dat.a_t_less_s.col(t - 1) = p_dat.F_ *  p_dat.a_t_t_s.unsafe_col(t - 1);
-    p_dat.V_t_less_s.slice(t - 1) = p_dat.F_ * p_dat.V_t_t_s.slice(t - 1) * p_dat.T_F_ + delta_t * p_dat.Q;
+    p_dat.a_t_less_s.col(t - 1) =
+      p_dat.state_trans_map(p_dat.a_t_t_s.col(t - 1)).sv;
+    p_dat.V_t_less_s.slice(t - 1) =
+      p_dat.state_trans_map(p_dat.V_t_t_s.slice(t - 1)).sv +
+      delta_t * p_dat.err_state_map(p_dat.Q).sv;
 
     if(p_dat.debug){
       std::stringstream str;
@@ -68,44 +41,45 @@ void GMA<T>::solve(){
 
     // E-step: Correction step
     const arma::uvec r_set = get_risk_set(p_dat, t);
-    arma::vec a(p_dat.a_t_t_s.colptr(t), p_dat.space_dim_in_arrays, false);
-    arma::mat V(p_dat.V_t_t_s.slice(t).memptr(), p_dat.space_dim_in_arrays,
-                p_dat.space_dim_in_arrays, false);
+    arma::vec a(p_dat.a_t_t_s.colptr(t), p_dat.space_dim, false);
+    arma::mat V(p_dat.V_t_t_s.slice(t).memptr(), p_dat.space_dim,
+                p_dat.space_dim, false);
     a =  p_dat.a_t_less_s.col(t - 1);
     V = p_dat.V_t_less_s.slice(t - 1);
 
     arma::mat V_t_less_inv;
     inv_sympd(V_t_less_inv, p_dat.V_t_less_s.slice(t - 1), p_dat.use_pinv,
               "ddhazard_fit_cpp estimation error: Failed to invert covariance matrix after prediction step");
-    arma::vec grad_term = V_t_less_inv * (p_dat.LR * p_dat.a_t_less_s.col(t - 1));
-
-    const arma::vec offsets =
-      (p_dat.any_fixed_in_M_step) ?
-        p_dat.fixed_terms.cols(r_set).t() * p_dat.fixed_parems :
-        arma::vec(r_set.n_elem, arma::fill::zeros);
+    arma::vec grad_term =
+      V_t_less_inv * (p_dat.LR * p_dat.a_t_less_s.col(t - 1));
 
     const arma::vec w = p_dat.weights(r_set);
     const arma::mat X_t = p_dat.X.cols(r_set);
+    arma::vec offsets_t(offsets(r_set));
 
     const arma::uvec is_event = p_dat.is_event_in_bin(r_set) == bin_number;
-    arma::vec at_risk_lenght(r_set.n_elem);
+    arma::vec at_risk_length(r_set.n_elem);
     int i = 0;
-    for(auto it = r_set.begin(); it < r_set.end(); it++, i++){
-      at_risk_lenght[i] = get_at_risk_length(
-        p_dat.tstop(*it), bin_tstop, p_dat.tstart(*it), bin_tstart);
-    }
+    if(T::uses_at_risk_length){
+      for(auto it = r_set.begin(); it < r_set.end(); it++, i++){
+        at_risk_length[i] = get_at_risk_length(
+          p_dat.tstop(*it), bin_tstop, p_dat.tstart(*it), bin_tstart);
+      }
+    } else
+      at_risk_length.zeros();
 
     arma::vec h_1d(r_set.n_elem);
 
-    unsigned int k, q = X_t.n_rows;
+    unsigned int k, q = p_dat.covar_dim;
     for(k = 0; k < max_rep; k++){
       arma::mat X_cross(q, q, arma::fill::zeros);
       arma::vec a_old = a;
 
-      arma::vec eta = (a(*p_dat.span_current_cov).t() * X_t).t() + offsets;
+      arma::vec eta = (p_dat.lp_map(a).sv.t() * X_t).t() + offsets_t;
 
 #ifdef _OPENMP
-      int n_threads = std::max(1, std::min(omp_get_max_threads(), (int)r_set.n_elem / 1000 + 1));
+      int n_threads = std::max(1, std::min(omp_get_max_threads(),
+                                           (int)r_set.n_elem / 1000 + 1));
 #pragma omp parallel num_threads(n_threads) if(n_threads > 1)
 {
 #endif
@@ -115,9 +89,12 @@ void GMA<T>::solve(){
 #pragma omp for schedule(static)
 #endif
       for(arma::uword i = 0; i < r_set.n_elem; i++){
-        double w_i = w[i];
-        h_1d[i] = w_i * T::d1(eta[i], is_event[i], at_risk_lenght[i]);
-        double h_2d_neg = - w_i * T::d2(eta[i], at_risk_lenght[i]);
+        auto trunc_eta = T::truncate_eta(
+          is_event[i], eta[i], exp(eta[i]), at_risk_length[i]);
+        h_1d[i] =  w[i] * T::d_log_like(
+          is_event[i], trunc_eta, at_risk_length[i]);
+        double h_2d_neg = -  w[i] * T::dd_log_like(
+          is_event[i], trunc_eta, at_risk_length[i]);
         sym_mat_rank_one_update(h_2d_neg, X_t.col(i), my_X_cross);
       }
 
@@ -136,27 +113,27 @@ void GMA<T>::solve(){
 
       if(p_dat.debug){
         my_print(p_dat, X_cross, "X^T(-p'')X");
-        my_debug_logger(p_dat) << "Condition number of X^T(-p'')X is " << arma::cond(X_cross);
+        my_debug_logger(p_dat) << "Condition number of X^T(-p'')X is " <<
+          arma::cond(X_cross);
       }
 
       {
-        arma::mat tmp = V_t_less_inv;
-        tmp(*p_dat.span_current_cov, *p_dat.span_current_cov) += X_cross;
+        arma::mat tmp = V_t_less_inv + p_dat.lp_map_inv(X_cross).sv;
         inv_sympd(V, tmp, p_dat.use_pinv,
                   "ddhazard_fit_cpp estimation error: Failed to invert Hessian");
       }
 
       {
-        arma::vec tmp = grad_term;
+        arma::vec tmp;
         if(1. - 1e-15 < p_dat.LR && p_dat.LR < 1. + 1e-15){
-          tmp(*p_dat.span_current_cov) +=
-            X_cross * a(*p_dat.span_current_cov) + X_t * h_1d;
+          tmp = X_cross * p_dat.lp_map(a).sv + X_t * h_1d;
+          tmp = p_dat.lp_map_inv(tmp).sv + grad_term;
 
         } else {
-          tmp(*p_dat.span_current_cov) +=
-            X_cross * a(*p_dat.span_current_cov) + X_t * (h_1d * p_dat.LR);
-
+          tmp = X_cross * p_dat.lp_map(a).sv + X_t * (h_1d * p_dat.LR);
+          tmp = p_dat.lp_map_inv(tmp).sv + grad_term;
           tmp += V_t_less_inv * ((1 - p_dat.LR) * a);
+
         }
         a =  V * tmp;
       }
@@ -200,13 +177,16 @@ void GMA<T>::solve(){
 
       my_print(p_dat, p_dat.a_t_t_s.col(t), "a_(" + str.str() + ")");
       my_print(p_dat, p_dat.V_t_t_s.slice(t), "V_(" + str.str() + ")\n");
-      my_debug_logger(p_dat) << "Condition number of V_(" + str.str() + ") is " << arma::cond(p_dat.V_t_t_s.slice(t));
+      my_debug_logger(p_dat) <<
+        "Condition number of V_(" + str.str() + ") is " <<
+          arma::cond(p_dat.V_t_t_s.slice(t));
     }
 
-    p_dat.B_s.slice(t - 1) = p_dat.V_t_t_s.slice(t - 1) * p_dat.T_F_ * V_t_less_inv;
+    p_dat.B_s.slice(t - 1) =
+      p_dat.state_trans_map(p_dat.V_t_t_s.slice(t - 1), right).sv *
+      V_t_less_inv;
   }
 }
 
-// Define classes
-template class GMA<GMA_hepler_logit>;
-template class GMA<GMA_hepler_exp>;
+template class GMA<logistic>;
+template class GMA<exponential>;

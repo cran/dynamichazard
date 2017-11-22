@@ -62,6 +62,10 @@ test_that("PF_smooth gives same results", {
     fixed_terms = t(X_Y$fixed_terms),
     tstart = X_Y$Y[1, ],
     tstop = X_Y$Y[2, ],
+
+    R = diag(1, ncol(Q)),
+    L = diag(1, length(a_0)),
+    m = numeric(length(a_0)),
     Q_0 = Q_0,
 
     Q = Q,
@@ -71,7 +75,6 @@ test_that("PF_smooth gives same results", {
     risk_obj = risk_set,
     F = diag(1, n_vars + 1),
     n_max = 10,
-    order = 1,
     n_threads = 1,
     N_fw_n_bw = 20,
     N_smooth = 100,
@@ -82,7 +85,7 @@ test_that("PF_smooth gives same results", {
     smoother = "Fearnhead_O_N",
     model = "logit")
 
-  test_func <- function(fit_quote, test_file_name){
+  test_func <- function(fit_quote, test_file_name, update = FALSE){
     get_func <- quote(
       function(x){
         cloud <- bquote(.(substitute(x)))
@@ -140,21 +143,19 @@ test_that("PF_smooth gives same results", {
       # Test versus previous computed values
 
       # Compute clouds means to test against
-      .file <- paste0(.(test_file_name), "_cloud_means")
-
-      # save_to_test(get_means(result), file_name = .file)
+      .file <- paste0(.(test_file_name), "_cloud_means.RDS")
       eval(substitute(
-        expect_equal(
-          get_means(result), read_to_test(.file), tolerance = 1.49e-08),
+        expect_known_value(
+          get_means(result), .file, tolerance = 1.49e-08, update = .(update)),
         list(.file = .file)), envir = environment())
 
       # This one may be skipped as the test file is large-ish
-      .file <- paste0("local_tests/", .(test_file_name))
-      # save_to_test(result, file_name = .file)
+      .file <- paste0("local_tests/", .(test_file_name), ".RDS")
       eval(substitute(
         test_if_file_exists(
           .file,
-          expect_equal(result, read_to_test(.file), tolerance = 1.49e-08)),
+          expect_known_value(
+            result, .file, tolerance = 1.49e-08, update = .(update))),
         list(.file = .file)), envir = environment())
     })
 
@@ -391,38 +392,4 @@ test_that("compute_summary_stats gives previous results", {
   # Test with method from Brier et al (2010)
   test_func("local_tests/PF_head_neck_w_Brier_method",
             "local_tests/compute_summary_stats_w_Brier_method")
-})
-
-test_that("help page example runs and gives previous computed results", {
-  skip_on_cran()
-
-  .lung <- lung[!is.na(lung$ph.ecog), ]
-  set.seed(43588155)
-  pf_fit <- PF_EM(
-    Surv(time, status == 2) ~ ph.ecog + age,
-    data = .lung, by = 50, id = 1:nrow(.lung),
-    Q_0 = diag(1, 3), Q = diag(1, 3),
-    max_T = 800,
-    control = list(
-      N_fw_n_bw = 500,
-      N_first = 2500,
-      N_smooth = 2500,
-      n_max = 50,
-      n_threads = parallel::detectCores()))
-
-  .file <- "local_tests/survival_lung_example"
-  # save_to_test(pf_fit[names(pf_fit) != "call"], .file)
-  test_if_file_exists(
-    .file,
-    expect_equal(pf_fit[names(pf_fit) != "call"], read_to_test(.file), tolerance = 1.49e-08)
-  )
-
-  .file <- "survival_lung_example_cloud_means"
-  # save_to_test(get_means(pf_fit$clouds), file_name = .file)
-  expect_equal(get_means(pf_fit$clouds), read_to_test(.file), tolerance = 1.49e-08)
-
-  expect_no_error(plot(pf_fit, cov_index = 1))
-  expect_no_error(plot(pf_fit, cov_index = 2))
-  expect_no_error(plot(pf_fit, cov_index = 3))
-  expect_no_error(plot(pf_fit$log_likes))
 })

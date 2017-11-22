@@ -9,28 +9,41 @@ ddhazard_boot(ddhazard_fit, strata, unique_id, R = 100,
   LRs = ddhazard_fit$control$LR * 2^(0:(-4)), print_errors = F)
 }
 \arguments{
-\item{ddhazard_fit}{Returned object from a \code{\link{ddhazard}} call}
+\item{ddhazard_fit}{returned object from a \code{\link{ddhazard}} call.}
 
-\item{strata}{Strata to sample within. These need to be on an individual by individual basis and not rows in the design matrix}
+\item{strata}{strata to sample within. These need to be on an individual by individual basis and not rows in the design matrix.}
 
-\item{unique_id}{Unique ids where entries match entries of \code{strata}}
+\item{unique_id}{unique ids where entries match entries of \code{strata}.}
 
-\item{R}{Number of bootstrap estimates}
+\item{R}{number of bootstrap estimates.}
 
-\item{do_stratify_with_event}{\code{TRUE} if sampling should be by strata of whether the individual has an event. An interaction factor will be made if \code{strata} is provided}
+\item{do_stratify_with_event}{\code{TRUE} if sampling should be by strata of whether the individual has an event. An interaction factor will be made if \code{strata} is provided.}
 
-\item{do_sample_weights}{\code{TRUE} if weights should be sample instead of individuals}
+\item{do_sample_weights}{\code{TRUE} if weights should be sampled instead of individuals.}
 
-\item{LRs}{Learning rates in decreasing order which will be used to estimate the model.}
+\item{LRs}{learning rates in decreasing order which will be used to estimate the model.}
 
-\item{print_errors}{\code{TRUE} if errors should be printed when estimations fails}
+\item{print_errors}{\code{TRUE} if errors should be printed when estimations fails.}
 }
 \value{
-An object like returned from the \code{\link[boot]{boot}} function
+An object like from the \code{\link[boot]{boot}} function.
 }
 \description{
-See the vignette 'Bootstrap illustration'. The \code{do_stratify_with_event} may be useful when either cases or non-cases are very rare to ensure that the model estimation succeeds.
+See the vignette \code{vignette("Bootstrap_illustration", "dynamichazard")}. The \code{do_stratify_with_event} may be useful when either cases or non-cases are very rare to ensure that the model estimation succeeds.
+}
+\examples{
+\dontrun{
+library(dynamichazard)
+set.seed(56219373)
+fit <- ddhazard(
+ Surv(time, status == 2) ~ log(bili), pbc, id = pbc$id, max_T = 3000,
+ Q_0 = diag(1, 2), Q = diag(1e-4, 2), by = 100,
+ control = list(method = "GMA"))
+bt <- ddhazard_boot(fit, R = 999)
+plot(fit, ddhazard_boot = bt, level = .9)
+}
+
 }
 \seealso{
-\code{\link{ddhazard}}, \code{\link[=plot.fahrmeier_94]{plot}}
+\code{\link{ddhazard}}, \code{\link[=plot.ddhazard]{plot}}
 }

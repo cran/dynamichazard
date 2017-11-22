@@ -111,7 +111,7 @@ for(i in 1:3){
 ## ---- eval=FALSE---------------------------------------------------------
 #  dynamichazard::ddhazard_app()
 
-## ----binning_fig, echo=FALSE, results="hide", fig.cap = "Illustration of going from event times to binary variables. Each horizontal line represents an individual. A cross indicates that new covariates are observed while a filled circle indicates that the individual have died. Open circles indicates that the individual is right censored. Vertical dashed lines are time interval borders", fig.height=3----
+## ----binning_fig, echo=FALSE, results="hide", fig.cap = "Illustration of going from event times to binary variables. Each horizontal line represents an individual. A cross indicates that new covariates are observed while a filled circle indicates that the individual have died. Open circles indicates that the individual is right censored. Vertical dashed lines are time interval borders.", fig.height=3----
 par(cex = .8, mar = c(1, 4, 1, 2))
 plot(c(0, 4), c(0, 1), type="n", xlab="", ylab="", axes = F)
 
@@ -165,49 +165,4 @@ for(i in seq_along(x_vals_and_point_codes)){
 
 # add letters
 text(rep(0, n_series), rev(y_pos), letters[1:n_series], cex = par()$cex * 1.5)
-
-## ---- echo=FALSE, fig.height=3-------------------------------------------
-f <- function(l) exp(-l) * (exp(l) - 1) * (1 - l) / l
-
-par(mfcol = c(1,2), 
-    cex = .67, cex.axis = 1, cex.lab = 1,
-    lwd = .67)
-
-tmp_cex <- .33
-plot(f, xlim = c(1e-2, 1e1), frame = FALSE, yaxt='n',
-     xlab = expression(lambda), ylab = "Mean", cex = tmp_cex)
-axis(2, at = c(-1, 0, 1))
-abline(h = 0, lty = 2)
-
-plot(f, xlim = c(1e-3, 1e3), log = "x", frame = FALSE,
-     yaxt='n',
-     xlab = expression(lambda), ylab = "Mean", cex = tmp_cex)
-axis(2, at = c(-1, 0, 1))
-abline(h = 0, lty = 2)
-
-## ---- echo=FALSE---------------------------------------------------------
-set.seed(1010101012)
-data_frame <- 
-  data.frame(id = c(1, 1, 1, 2, 2),
-             tstop = c(0, 2, 3, 0, 2), tstart = c(2, 3, 4, 2, 4), y = c(0, 0, 1, 0, 0), 
-             x1 = round(rnorm(5), 2), x2 = round(rnorm(5), 2))
-
-## ------------------------------------------------------------------------
-# The data we use
-head(data_frame)
-
-## ---- eval=FALSE---------------------------------------------------------
-#  # The fit
-#  fit <- ddhazard(Surv(tstart, tstop, y) ~ x1 + ddFixed(x2), data_frame,
-#                  by = 1, # time interval lengths are 1
-#                  id = data_frame$id, model = "exponential")
-
-## ---- echo=FALSE---------------------------------------------------------
-data_frame_new <- data_frame
-data_frame_new[1, 2:3] <- c(.5, 2)
-data_frame_new <- rbind(c(1, 0, .5, 0, .43, .33),
-                        data_frame_new)
-
-## ------------------------------------------------------------------------
-head(data_frame_new)
 
