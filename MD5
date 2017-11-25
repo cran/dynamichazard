@@ -1,4 +1,4 @@
-afe9d47d345681cde81974357e0db6e9 *DESCRIPTION
+6a0a9db74a9c8428f0622afb7492a558 *DESCRIPTION
 5601cfff575dc5dd180908f73ff06451 *NAMESPACE
 9382c282431ba2cbe52cd5b9979085b1 *NEWS.md
 927f395ba1e9bf32a23440991c77f644 *R/HDs.R
@@ -9,7 +9,7 @@ ae2c10b2f5269709d4a8e1bf9297dabe *R/ddhazard.R
 bdedcbe638297b09dd504c194e772bb6 *R/get_design_matrix.R
 74a4e89fa5afb85941318fe1d05b5926 *R/hatvalues.R
 84c96568eefb0e2f2a0009cfa2b8664a *R/loglike.R
-9ca1530d3cd65bb38f9870c8455f3091 *R/options.R
+36c0f42f0b21a2a3152cf287cdd8d6ac *R/options.R
 e8d1cb534b36628eabef8877f13d638b *R/plot.R
 bb9c55798c0687d4e2634cc3ce822894 *R/predict.R
 9b3c0ce80b652f2e8c35501b08e2a089 *R/print.R
@@ -23,19 +23,19 @@ eba75d0d7557f7543f47e545218ab28f *R/test_utils.R
 a107b6dbd3af50de34273328659f92fb *build/vignette.rds
 473fee0d66a01397837cac3c0c8a0134 *data/datalist
 c2e29a112846c5c9e5ea0aa9062c9ab4 *data/hds.rda
-c23ea33e10d1c7ebb71e95c07ad54f28 *inst/doc/Bootstrap_illustration.pdf
+c8e1b3baa03e568146c480b38f46af06 *inst/doc/Bootstrap_illustration.pdf
 a9dfcaa1d3a6a5971d2c8b97ed1dc537 *inst/doc/Bootstrap_illustration.pdf.asis
 58529f54780f9e052b9dcb9b73e2b21a *inst/doc/Comparing_methods_for_logistic_models.R
 a3255928cadfe38ecf709b7de8dbb8a3 *inst/doc/Comparing_methods_for_logistic_models.Rmd
-55ce03be6e089c870a1267f8a0ba512e *inst/doc/Comparing_methods_for_logistic_models.pdf
+b93883b797338413d1062e7e4ab5d446 *inst/doc/Comparing_methods_for_logistic_models.pdf
 f9fb6f200c8c28d3dabce3bb595b7645 *inst/doc/Diagnostics.R
 59f0e47f91f2c3edf1452edca5fcb447 *inst/doc/Diagnostics.Rmd
-710c094cbad21ab383c8ea1ae5feb6ec *inst/doc/Diagnostics.pdf
-0cb43f3a02c0bf0683389ee1a7359bb2 *inst/doc/Particle_filtering.pdf
+50de4373e566cbe2cc9e477a8d766f93 *inst/doc/Diagnostics.pdf
+049156bbaff407fb62c6851c58dec960 *inst/doc/Particle_filtering.pdf
 c1508de265082ec165462e9372e6943d *inst/doc/Particle_filtering.pdf.asis
 0125d32f895e1b4720030f6b3be1f5fb *inst/doc/ddhazard.R
-891bd897f0ddca8e04ab96b2a7fe5021 *inst/doc/ddhazard.Rmd
-b5882c8dc1df81c79c1a9db493a244a5 *inst/doc/ddhazard.pdf
+0ce96cc31f0c75a2b58a5699e3cf9404 *inst/doc/ddhazard.Rmd
+d24f96e6a3c5d31b0ccad22adc1f6805 *inst/doc/ddhazard.pdf
 6acea791c02df195b509c7c4007175bb *inst/shiny/app.R
 add7862345674a520cf6cad2114849a4 *man/PF_EM.Rd
 0eb9447bbb6c2012e9fa6987fb89dbe3 *man/ddFixed.Rd
@@ -82,7 +82,7 @@ c71cc452ceda22d85fbfb4698ab9cf77 *src/bigglm_wrapper.h
 b49d0a7c6cb91e32d4c88fe19611ad34 *src/biglm/boundedQRf.f
 7dd0650414f75755ecee9c6f97bb85b6 *src/ddhazard.h
 63693061edf5b3bb1f26f2d9fc3d3144 *src/ddhazard/EKF_solver.cpp
-c67d09dc7ed795ce365888af5398bd45 *src/ddhazard/GMA_solver.cpp
+b971adeba89d2fb6172a8d699fb9fb9d *src/ddhazard/GMA_solver.cpp
 71526d02736dfcba7b3c987960a6f53a *src/ddhazard/SMA_solver.cpp
 f790416177a17a4edd943c4979784c63 *src/ddhazard/UKF_solver.cpp
 6c08b2b6c5c8e034bb1c91f269ccf87f *src/ddhazard_fit.cpp
@@ -92,8 +92,7 @@ e9fe9035ae3f52c3848f281940e193f7 *src/family.cpp
 a6ed9685823d55f20421391791ec03e0 *src/for_tests.cpp
 54e2f933125b95ea1d391196105d67c6 *src/loglike.cpp
 df464e06dd7d4a1cb9a8d1b8cfa45ab0 *src/parallel_glm.cpp
-4665734162f64b450e695cf678f3ca09 *src/problem_data.cpp
-912eb6abbd44a8d06dfdbba2261f6d43 *src/problem_data.h
+8f5da84f5784f8c375b53958ca5f6b23 *src/problem_data.h
 c7cf434fab79daf9a9f80359b6173e37 *src/risk_obj.cpp
 c40fe00c8e469df5ffc1b3eda4174f2c *src/sample_funcs.cpp
 b8878d38a23609e763a85ca9108a1562 *src/sample_funcs.h
@@ -235,6 +234,6 @@ a3255928cadfe38ecf709b7de8dbb8a3 *vignettes/Comparing_methods_for_logistic_model
 c1508de265082ec165462e9372e6943d *vignettes/Particle_filtering.pdf.asis
 fbf7e315d2170e50d01e1ead21ac9f0a *vignettes/bib_style.csl
 868f74a9f009f738169eadda2fcd1b4a *vignettes/bibliography.bib
-891bd897f0ddca8e04ab96b2a7fe5021 *vignettes/ddhazard.Rmd
+0ce96cc31f0c75a2b58a5699e3cf9404 *vignettes/ddhazard.Rmd
 d0d290af2b78e4c9a5e194bf69361e61 *vignettes/ddhazard_bibliography.bib
 af4c4d9c281e3ea971cd33c77199d58c *vignettes/ddhazard_header
