@@ -204,3 +204,51 @@ test_that("solve_w_precomputed_chol_test gives solve solution", {
 # test_func(10)
 # test_func(100)
 # test_func(250)
+
+#####
+
+test_that("LU_factorization.solve gives correct answer for a vector and matrix", {
+  A <- matrix(c(
+     3, -7, -2,  2,
+    -3,  5,  1,  0,
+     6, -4,  0, -5,
+    -9,  5, -5, 12), byrow = TRUE, ncol = 4)
+
+  b <- c(-9, 5, 7, 11)
+  expect_equal(drop(solve_LU_vec(A, b)), solve(A, b))
+
+  B <- cbind(b, c(2, -3, 9, 7))
+  expect_equal(solve_LU_mat(A, B), solve(A, B), check.attributes = FALSE)
+})
+
+#####
+
+test_that("LU_factorization inverse gives correct answer", {
+  A <- matrix(c(
+     3, -7, -2,  2,
+    -3,  5,  1,  0,
+     6, -4,  0, -5,
+    -9,  5, -5, 12), byrow = TRUE, ncol = 4)
+
+  expect_equal(solve_LU_inv(A), solve(A))
+})
+
+
+#####
+
+test_that("qr_qty gives correct answer for a vector and matrix", {
+  A <- matrix(c(
+     3, -7, -2,
+    -3,  5,  1,
+     6, -4,  0,
+    -9,  5, -5), byrow = TRUE, ncol = 3)
+
+  qr. <- qr(A, LAPACK = TRUE)
+  expect_equal(qr.R(qr.), qr_R_test(A))
+
+  b <- c(-9, 5, 7, 11)
+  expect_equal(qr_qty_vec_test(A = A, b), qr.qty(qr., b))
+
+  B <- cbind(b, c(2, -3, 9, 7))
+  expect_equal(qr_qty_mat_test(A = A, B), unname(qr.qty(qr., B)))
+})

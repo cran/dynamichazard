@@ -19,11 +19,6 @@
 //// as this greatly aids in finding mistakes in your code, and hence speeds up development.
 //// We recommend that run-time checks be disabled _only_ for the shipped version of your program.
 
-
-#define ARMA_DONT_PRINT_ERRORS
-// from armadillo config.hpp:
-//// Comment out the above line if you don't want errors and warnings printed (eg. failed decompositions)
-
 #include <RcppArmadillo.h>
 
 // Print function to print out vectors as rows

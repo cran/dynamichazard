@@ -7,7 +7,7 @@ sims <- test_sim_func_logit(n_series = 1e3, n_vars = 3, t_0 = 0, t_max = 10,
 
 test_that("Static glm yields expected number of events, correct rows and same result when supplying risk_obj", {
   form <- survival::Surv(tstart, tstop, event) ~ . - id - tstart - tstop - event
-  res <- dynamichazard::static_glm(
+  res <- static_glm(
     form = form, data = sims$res, by = 1, max_T = 10, id = sims$res$id,
     family = "binomial", model = T)
 
@@ -22,7 +22,7 @@ test_that("Static glm yields expected number of events, correct rows and same re
   design_mat = get_design_matrix(form, sims$res)
   risk_obj = get_risk_obj(Y = design_mat$Y, by = 1, max_T = 10,
                           id = sims$res$id)
-  res_own_risk_obj <- dynamichazard::static_glm(
+  res_own_risk_obj <- static_glm(
     form = form, data = sims$res, risk_obj = risk_obj)
 
   expect_equal(res_own_risk_obj$coefficients, res$coefficients)
@@ -35,7 +35,7 @@ test_that("static glm gives results with exponential that match previous computa
                             intercept_start = -3, sds = c(.1, rep(1, 3)))
 
   form <- survival::Surv(tstart, tstop, event) ~ . - id - tstart - tstop - event
-  res <- dynamichazard::static_glm(
+  res <- static_glm(
     form = form, data = sims$res, by = 1, max_T = 10, id = sims$res$id,
     family = "exponential", model = T)
 
@@ -46,7 +46,7 @@ test_that("static glm gives results with exponential that match previous computa
                c(-3.1239104299217413, 0.5945953199533323, 1.0979243555250271, -0.9534880608516028))
 
   # test with lower max_T
-  res_lower <- dynamichazard::static_glm(
+  res_lower <- static_glm(
     form = form, data = sims$res, by = 1, max_T = 6, id = sims$res$id,
     family = "exponential", model = T)
 
@@ -58,7 +58,7 @@ test_that("static glm gives results with exponential that match previous computa
 
 test_that("design_matrix yields equal result with different values of use_weights", {
   form <- formula(survival::Surv(tstart, tstop, event) ~ . - id - tstart - tstop - event, data = sims$res)
-  res <- dynamichazard::static_glm(
+  res <- static_glm(
     form = form, data = sims$res, by = 1, max_T = 10, id = sims$res$id,
     family = "logit", model = T)
 
@@ -140,10 +140,111 @@ test_that("Gets same with different methods", {
 
     f3 <- get_fit("glm")
     f4 <- get_fit("speedglm")
-    f5 <- get_fit("parallelglm")
+    f5 <- get_fit("parallelglm_quick")
+    f6 <- get_fit("parallelglm_QR")
 
     expect_equal(f1$coefficients, f3)
     expect_equal(f3, f4, check.attributes = FALSE)
     expect_equal(f4, f5, check.attributes = FALSE)
+    expect_equal(f5, f6, check.attributes = FALSE)
   }
+})
+
+test_that("get_survival_case_weights_and_data works when columns names are already used",{
+  dat <- data.frame(
+    id = c(1, 2, 3),
+    Y  = c(TRUE, FALSE, FALSE),
+    weights = c(9, 10, 2),
+    t  = c(2, 2, 2),
+    x  = c(2, 1, 0))
+
+  expect_warning(out <- get_survival_case_weights_and_data(
+    Surv(t, Y) ~ x, data = dat, by = 1, max_T = 2, use_weights = FALSE,
+    id = dat$id),
+    "Column called 'Y' is already in the data.frame. Will use'Y.1'instead", fixed = TRUE)
+
+  expect_equal(
+    out$X,
+    structure(list(
+      id = c(1, 2, 3, 1, 2, 3),
+      Y = c(TRUE, FALSE, FALSE, TRUE, FALSE, FALSE),
+      weights = c(9, 10, 2, 9, 10, 2),
+      t = c(2, 2, 2, 2, 2, 2),
+      x = c(2, 1, 0, 2, 1, 0),
+      Y.1 = c(FALSE, FALSE, FALSE, TRUE, FALSE, FALSE), t.1 = c(1, 1, 1, 2, 2, 2),
+      weights.1 = c(1, 1, 1, 1, 1, 1)),
+      .Names = c("id", "Y", "weights", "t", "x", "Y.1", "t.1", "weights.1"),
+      row.names = c(NA, -6L), class = "data.frame"))
+
+  expect_warning(
+    fit <- static_glm(Surv(t, Y) ~ -1 + x,
+                      data = dat, by = 1, max_T = 2, id = dat$id),
+    "Column called 'weights' is already in the data.frame. Will use'weights.1'instead.")
+
+  expect_equal(fit$coefficients,
+               glm(Y.1 ~ -1 + x, binomial(), out$X)$coefficients)
+})
+
+test_that("get_survival_case_weights_and_data works with observation in counting setup with `holes'",{
+  dat <- data.frame(
+    id     = c(1 , 1, 2),
+    tstart = c(0 , 3, 0),
+    tstop  = c(.5, 4, 4),
+    event  = c(  F, T, F),
+    x      = 1:3)
+
+  res <- get_survival_case_weights_and_data(
+    Surv(tstart, tstop, event) ~ x,
+    data = dat, by = 1, max_T = 4, id = dat$id,
+    use_weights = FALSE)
+
+  expect_equal(
+    res$X,
+    structure(list(
+      id = c(1, 2, 2, 2, 2, 1),
+      tstart = c(0, 0, 0, 0, 0, 3),
+      tstop = c(0.5, 4, 4, 4, 4, 4),
+      event = c(FALSE, FALSE, FALSE, FALSE, FALSE, TRUE),
+      x = c(1L, 3L, 3L, 3L, 3L, 2L),
+      Y = c(FALSE, FALSE, FALSE, FALSE, FALSE, TRUE),
+      t = c(1, 1, 2, 3, 4, 4),
+      weights = c(1, 1, 1, 1, 1, 1)),
+      .Names = c("id", "tstart", "tstop", "event", "x", "Y", "t", "weights"),
+      row.names = c(NA, -6L), class = "data.frame"))
+
+  res <- get_survival_case_weights_and_data(
+    Surv(tstart, tstop, event) ~ x,
+    data = dat, by = 1, max_T = 4, id = dat$id,
+    use_weights = TRUE)
+
+  expect_equal(
+    res$X,
+    structure(list(
+      Y = c(0, 0, 1), id = c(1, 2, 1),
+      tstart = c(0, 0, 3), tstop = c(0.5, 4, 4),
+      event = c(FALSE, FALSE, TRUE), x = c(1L, 3L, 2L), weights = c(1, 4, 1)),
+      .Names = c("Y", "id", "tstart", "tstop", "event", "x", "weights"),
+      row.names = c(NA, -3L), class = "data.frame"))
+
+  dat <- data.frame(
+    id     = c(1, 1  , 1  , 2),
+    tstart = c(0, 1.5, 3.5, 0),
+    tstop  = c(1, 2  , 4  , 4),
+    event  = c(F, F  , T  , F),
+    x      = 1:4)
+
+  res <- get_survival_case_weights_and_data(
+    Surv(tstart, tstop, event) ~ x,
+    data = dat, by = 1, max_T = 4, id = dat$id,
+    use_weights = FALSE)
+
+  expect_equal(
+    res$X,
+    structure(list(
+      id = c(1, 2, 2, 2, 2), tstart = c(0, 0, 0, 0, 0),
+      tstop = c(1, 4, 4, 4, 4), event = c(FALSE, FALSE, FALSE, FALSE, FALSE),
+      x = c(1L, 4L, 4L, 4L, 4L), Y = c(FALSE, FALSE, FALSE, FALSE, FALSE),
+      t = c(1, 1, 2, 3, 4), weights = c(1, 1, 1, 1, 1)),
+      .Names = c("id", "tstart", "tstop", "event", "x", "Y", "t", "weights"),
+      row.names = c(NA, -5L), class = "data.frame"))
 })

@@ -3,8 +3,6 @@ context("Running test_PF")
 test_that("dmvnrm_log_test gives correct likelihood", {
   skip_if_not_installed("mvtnorm")
 
-  dmvnrm_log_test <- asNamespace("dynamichazard")$dmvnrm_log_test
-
   for(i in 1:10){
     n <- 5
     mu <- rnorm(n)
@@ -33,8 +31,6 @@ get_means <- function(result){
 
 test_that("PF_smooth gives same results", {
   skip_on_cran()
-
-  PF_smooth <- asNamespace("dynamichazard")$PF_smooth
 
   n_vars <- 2
   set.seed(78095324)
@@ -67,6 +63,8 @@ test_that("PF_smooth gives same results", {
     L = diag(1, length(a_0)),
     m = numeric(length(a_0)),
     Q_0 = Q_0,
+
+    fixed_parems = numeric(),
 
     Q = Q,
     a_0 = a_0,
@@ -132,7 +130,7 @@ test_that("PF_smooth gives same results", {
       # Test that multithreaded version gives the same
       set.seed(30302129)
       old_args <- args
-      args$n_threads <- max(2, parallel:::detectCores())
+      args$n_threads <- max(parallel::detectCores(logical = FALSE), 1)
 
       result_multi <- .(fit_quote)
       expect_equal(result_multi, result)
@@ -221,8 +219,6 @@ test_that("PF_smooth gives same results", {
 test_that("Import and export PF cloud from Rcpp gives the same", {
   skip_on_cran()
 
-  PF_cloud_to_rcpp_and_back <- asNamespace("dynamichazard")$PF_cloud_to_rcpp_and_back
-
   #####
   # Without transition_likelihoods
   test_func <- function(has_transition){
@@ -278,22 +274,8 @@ test_that("PF_EM stops with correct error messages due to wrong or missing argum
   args$model <- "logit"
   expect_error(
     do.call(PF_EM, args), paste0(
-      "Fixed terms are not supported"))
-
-  args$formula <- survival::Surv(start, stop, event) ~ group
-  expect_error(
-    do.call(PF_EM, args), paste0(
-      "Please supply the number of particle for ", sQuote("control\\$N_first")))
-
-  args$control <- list(N_first = 1e3)
-  expect_error(
-    do.call(PF_EM, args), paste0(
-      "Please supply the number of particle for ", sQuote("control\\$N_fw_n_bw")))
-
-  args$control <- c(args$control, list(N_fw_n_bw = 1e3))
-  expect_error(
-    do.call(PF_EM, args), paste0(
-      "Please supply the number of particle for ", sQuote("control\\$N_smooth")))
+      "Please supply the number of particle in ",
+      sQuote("PF_control(N_first)")), fixed = TRUE)
 })
 
 test_that("PF_EM gives previous results on head neck data set", {
@@ -303,25 +285,27 @@ test_that("PF_EM gives previous results on head neck data set", {
     formula = survival::Surv(start, stop, event) ~ group,
     data = head_neck_cancer,
     by = 1, Q_0 = diag(1, 2), Q = diag(0.1, 2),
-    control = list(N_fw_n_bw = 200, N_smooth = 1e3, N_first = 2e3,
-                   n_max = 5,
-                   n_threads = max(parallel::detectCores(), 2)),
+    control = list(
+      N_fw_n_bw = 200, N_smooth = 1e3, N_first = 2e3, n_max = 5,
+      n_threads =  max(parallel::detectCores(logical = FALSE), 1)),
     max_T = 45)
 
   test_func <- function(smoother, file_name){
+    f1 <- paste0("local_tests/", file_name)
+    f2 <- paste0(file_name, "_cloud_means")
+
     q <- bquote({
       these_args <- args
       these_args$control <- c(these_args$control, smoother = .(smoother))
 
       set.seed(98612415)
-      result <- suppressWarnings( # Supressed as there is a warning about not converging
-        do.call(PF_EM, these_args))
+      # Supressed as there is a warning about not converging
+      result <- suppressWarnings(do.call(PF_EM, these_args))
 
       #####
       # Test that result are reproducable
       r2 <- result$call
-      r2[["control"]] <- c(eval(r2$control, environment()),
-                           list(seed = result$seed))
+      assign(".Random.seed", result$seed, envir = .GlobalEnv)
       r2  <- suppressWarnings(eval(r2, environment()))
 
       result$call <- NULL
@@ -333,17 +317,15 @@ test_that("PF_EM gives previous results on head neck data set", {
       result <- result[c("a_0", "Q", "clouds", "summary_stats", "log_likes",
                          "n_iter", "effective_sample_size", "seed")]
 
-      .file <- paste0("local_tests/", .(file_name))
-      # save_to_test(result, .file)
+      # save_to_test(result, .(f1))
       test_if_file_exists(
-        .file,
-        expect_equal(result, read_to_test(.file), tolerance = 1.49e-08))
+        .(f1),
+        expect_equal(result, read_to_test(.(f1)), tolerance = 1.49e-08))
 
       # Compute clouds means to test against
-      .file <- paste0(.(file_name), "_cloud_means")
-
-      # save_to_test(get_means(result$clouds), file_name = .file)
-      expect_equal(get_means(result$clouds), read_to_test(.file), tolerance = 1.49e-08)
+      # save_to_test(get_means(result$clouds), file_name = .(f2))
+      expect_equal(get_means(result$clouds), read_to_test(.(f2)),
+                   tolerance = 1.49e-08)
     })
 
     eval(q, envir = parent.frame())
@@ -353,10 +335,31 @@ test_that("PF_EM gives previous results on head neck data set", {
   test_func(smoother = "Brier_O_N_square", "PF_head_neck_w_Brier_method")
 })
 
-test_that("compute_summary_stats gives previous results", {
+test_that("PF_EM gives previous results on head neck data set with fixed effects and the logit model", {
   skip_on_cran()
+  skip_if(!dir.exists("previous_results/local_tests"))
 
-  compute_summary_stats <- asNamespace("dynamichazard")$compute_summary_stats
+  set.seed(61364778)
+  pp_fit <- suppressWarnings(
+    # we take to few iterations so there will be a warning
+    PF_EM(
+      formula = survival::Surv(start, stop, event) ~ ddFixed(group),
+      data = head_neck_cancer,
+      by = 1, Q_0 = 10, Q = 0.01,
+      control = PF_control(
+        N_fw_n_bw = 200, N_smooth = 2e3, N_first = 2e3,
+        n_max = 3,
+        method = "AUX_normal_approx_w_cloud_mean",
+        n_threads = max(parallel::detectCores(logical = FALSE), 1)),
+      max_T = 30))
+
+  expect_known_value(pp_fit[!names(pp_fit) %in%
+                             c("clouds", "call", "summary_stats")],
+                     "local_tests/pf_logit_w_fixed.RDS")
+})
+
+test_that("compute_summary_stats_first_o_RW gives previous results", {
+  skip_on_cran()
 
   Q_0 <- diag(1, 2)
   Q <- diag(0.1, 2)
@@ -371,8 +374,8 @@ test_that("compute_summary_stats gives previous results", {
 
           #####
           # Test that multithreaded version gives the same
-          sum_stats <- compute_summary_stats(cloud_example, 1, a_0 = a_0, Q = Q, Q_0 = Q_0)
-          s2 <- compute_summary_stats(cloud_example, 4, a_0 = a_0, Q = Q, Q_0 = Q_0)
+          sum_stats <- compute_summary_stats_first_o_RW(cloud_example, 1, a_0 = a_0, Q = Q, Q_0 = Q_0)
+          s2 <- compute_summary_stats_first_o_RW(cloud_example, 4, a_0 = a_0, Q = Q, Q_0 = Q_0)
 
           expect_equal(sum_stats, s2)
 

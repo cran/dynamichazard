@@ -3,11 +3,11 @@
 
 #include <tuple>
 #include "particles.h"
+#include "PF_data.h"
 #include "../arma_BLAS_LAPACK.h"
 #include "../utils.h"
 
 #define MAX(a,b) (((a)>(b))?(a):(b))
-#define USE_PRIOR_IN_BW_FILTER_DEFAULT true
 
 struct normalize_weights_output {
   double ESS = 0.;
@@ -88,7 +88,10 @@ struct normalize_log_resampling_weight_F{
 template<bool compute_ESS, bool update_particles>
 inline normalize_weights_output normalize_log_resampling_weight(
     cloud &cl, const double max_weight){
-  return normalize_weights<normalize_log_resampling_weight_F, compute_ESS, update_particles>(cl, max_weight);
+  return
+    normalize_weights
+    <normalize_log_resampling_weight_F, compute_ESS, update_particles>
+    (cl, max_weight);
 }
 
 /* ------------------------------------------- */
@@ -133,8 +136,16 @@ std::vector<work_block<iterator>> get_work_blocks(
 
 /* ------------------------------------------- */
 
+/* The function below takes in a state \bar{\alpha} and returns
+ * mu = R^\top L^\top X^\top ((-G(\bar{\alpha})) X L \bar{\alpha}
+ *       + g(\bar{\alpha}))
+ * Sigma = (R^\top L^\top X^\top (-G(\bar{\alpha})) X L R + Q^-1)^-1 */
+
 struct input_for_normal_apprx {
+  /* mean of error term              */
   arma::vec mu;
+  /* covariance matrix of error term */
+  arma::mat Sigma_inv;
   arma::mat Sigma_inv_chol;
   arma::mat Sigma_chol;
   arma::mat sigma_chol_inv;
@@ -189,14 +200,16 @@ static input_for_normal_apprx compute_mu_n_Sigma_from_normal_apprx(
 
   /* Compute the terms that does not depend on the outcome */
   /* Sigma^-1 = (Q + \tilde{Q})^{-1} */
-  arma::uword p = alpha_bar.n_elem;
+  arma::uword p = data.err_dim;
+  arma::vec coefs = data.err_state_inv->map(alpha_bar).sv;
   arma::mat Sigma_inv = Q.inv;
 
   ans.mu = arma::vec(p, arma::fill::zeros);
   arma::vec &mu = ans.mu;
 
   /* Add the terms that does depend on the outcome */
-  auto jobs = get_work_blocks(r_set.begin(), r_set.end(), data.work_block_size);
+  auto jobs =
+    get_work_blocks(r_set.begin(), r_set.end(), data.work_block_size);
   unsigned int n_jobs = jobs.size();
 
 #ifdef _OPENMP
@@ -226,7 +239,9 @@ static input_for_normal_apprx compute_mu_n_Sigma_from_normal_apprx(
     auto &job = jobs[i];
     arma::uvec my_r_set(job.start, job.block_size, false /* don't copy */);
 
-    arma::vec eta =  get_linear_product(alpha_bar, data.X, my_r_set);
+    arma::vec eta =  get_linear_product(coefs, data.X, my_r_set);
+    arma::vec offsets = data.fixed_effects(my_r_set);
+    eta += offsets;
     const arma::uvec is_event = data.is_event_in_bin(my_r_set) == t - 1; /* zero indexed while t is not */
 
     if(densities::uses_at_risk_length){
@@ -235,6 +250,7 @@ static input_for_normal_apprx compute_mu_n_Sigma_from_normal_apprx(
     }
 
     auto it_eta = eta.begin();
+    auto it_off = offsets.begin();
     auto it_is_event = is_event.begin();
     auto it_r = my_r_set.begin();
     auto it_start = starts.begin();
@@ -242,10 +258,11 @@ static input_for_normal_apprx compute_mu_n_Sigma_from_normal_apprx(
     arma::uword n_elem = eta.n_elem;
     /*
       Update with:
-        Signa = ... + X^T (-G) X
-        mu = X^T (-G) X \bar{alpha} + X^T (-g)
+        Sigma = ... + R^T L^T X^T (-G) X L R
+        mu    = R^T L^T X^T (-G) X L \bar{alpha} + R^T L^T X^T (-g)
     */
-    for(arma::uword i = 0; i < n_elem; ++i, ++it_eta, ++it_is_event, ++it_r){
+    for(arma::uword i = 0; i < n_elem;
+        ++i, ++it_eta, ++it_is_event, ++it_r, ++it_off){
       double at_risk_length = 0;
       if(densities::uses_at_risk_length){
         at_risk_length = get_at_risk_length(
@@ -261,9 +278,9 @@ static input_for_normal_apprx compute_mu_n_Sigma_from_normal_apprx(
       double neg_G = - densities::dd_log_like(
         *it_is_event, trunc_eta, at_risk_length);
 
-      sym_mat_rank_one_update(neg_G, data.X.col(*it_r), my_Sigma_inv);
-
-      my_mu += data.X.col(*it_r) * ((*it_eta * neg_G) + g);
+      arma::vec x_err_space = data.X.col(*it_r);
+      sym_mat_rank_one_update(neg_G, x_err_space, my_Sigma_inv);
+      my_mu += x_err_space * (((*it_eta - *it_off) * neg_G) + g);
     }
   }
 
@@ -295,6 +312,7 @@ static input_for_normal_apprx compute_mu_n_Sigma_from_normal_apprx(
   ans.Sigma_inv_chol = arma::chol(Sigma_inv);
   ans.Sigma_chol = arma::chol(arma::inv(Sigma_inv)); // TODO: do something smarter
   ans.sigma_chol_inv = arma::inv(arma::trimatu(ans.Sigma_chol));
+  std::swap(ans.Sigma_inv, Sigma_inv);
 
   return ans;
 }
@@ -309,24 +327,23 @@ struct input_for_normal_apprx_w_cloud_mean : public input_for_normal_apprx {
     input_for_normal_apprx(other) {}
 };
 
-template<typename densities, bool is_forward, bool use_prior_in_bw_filter = USE_PRIOR_IN_BW_FILTER_DEFAULT>
+template<typename densities, bool is_forward>
 static input_for_normal_apprx_w_cloud_mean
   compute_mu_n_Sigma_from_normal_apprx_w_cloud_mean(
-    const PF_data &data, const unsigned int t, const covarmat &Q, const arma::vec &alpha_bar,
+    densities &dens_calc, const PF_data &data, const unsigned int t,
+    const covarmat &Q, const arma::vec &alpha_bar,
     cloud &cl /* set mu_js when cloud is passed to */){
-    constexpr bool is_bw_w_use_prior = (!is_forward) && use_prior_in_bw_filter;
-
     const covarmat *Q_use;
     const arma::mat tmp;
-    arma::vec *mu_term;
-    if(is_bw_w_use_prior){
-      // Add the covariance matrix of the artificial prior
-      arma::mat art = densities::get_artificial_prior_covar(data, t);
-      Q_use = new covarmat(arma::inv(Q.inv + arma::inv(art)));
-      mu_term = new arma::vec(arma::solve(art, data.a_0));
+    const arma::vec *mu_term;
+    if(!is_forward){
+      Q_use = new covarmat(arma::inv(
+        data.state_trans_err_inv->map(Q.inv).sv + data.uncond_covar(t)));
+      mu_term = &data.uncond_mean(t);
 
     } else {
       Q_use = &Q;
+      // avoid wmaybe-uninitialized
       mu_term = nullptr;
 
     }
@@ -342,17 +359,27 @@ static input_for_normal_apprx_w_cloud_mean
 #pragma omp  parallel for schedule(static)
 #endif
     for(unsigned int i = 0; i < n_elem; ++i){
-      arma::vec mu_j = solve_w_precomputed_chol(Q.chol, cl[i].get_state()) + ans.mu;
-      if(is_bw_w_use_prior)
-        mu_j += *mu_term;
+      arma::vec mu_j;
+      if(is_forward){
+        mu_j = data.state_trans->map(cl[i].get_state()).sv;
+        mu_j = data.err_state_inv->map(mu_j).sv;
+        mu_j = solve_w_precomputed_chol(Q.chol, mu_j) + ans.mu;
+
+      } else {
+        mu_j = data.err_state_inv->map(cl[i].get_state()).sv;
+        mu_j = solve_w_precomputed_chol(Q.chol, mu_j);
+        mu_j = data.state_trans_inv->map(data.err_state->map(mu_j).sv).sv;
+        mu_j = data.err_state_inv->map(mu_j).sv      + ans.mu + *mu_term;
+
+      }
+
       mu_j = solve_w_precomputed_chol(ans.Sigma_inv_chol, mu_j);
 
       ans.mu_js[i] = std::move(mu_j);
     }
 
-    if(is_bw_w_use_prior){
+    if(!is_forward){
       delete Q_use;
-      delete mu_term;
 
     }
 
@@ -371,25 +398,21 @@ using input_for_normal_apprx_w_particle_mean =
   std::vector<input_for_normal_apprx_w_particle_mean_element>;
 
 template<typename densities, typename mu_iterator,
-         typename Func, bool is_forward, bool use_prior_in_bw_filter = USE_PRIOR_IN_BW_FILTER_DEFAULT>
+         typename Func, bool is_forward>
 static input_for_normal_apprx_w_particle_mean
 compute_mu_n_Sigma_from_normal_apprx_w_particles(
-  const PF_data &data, const unsigned int t, const covarmat &Q,
-  mu_iterator begin, const unsigned int size){
-  constexpr bool is_bw_w_use_prior = (!is_forward) && use_prior_in_bw_filter;
-
+  densities &dens_calc, const PF_data &data, const unsigned int t,
+  const covarmat &Q, mu_iterator begin, const unsigned int size){
   const covarmat *Q_use;
   arma::mat Q_art_chol;
-  arma::vec *mu_term;
-  if(is_bw_w_use_prior){
+  const arma::vec *mu_term;
+  if(!is_forward){
     // Add the covariance matrix of the artificial prior
-    arma::mat art = densities::get_artificial_prior_covar(data, t);
-    Q_use = new covarmat(arma::inv(Q.inv + arma::inv(art)));
-    mu_term = new arma::vec(arma::solve(art, data.a_0));
+    Q_use = new covarmat(arma::inv(Q.inv + data.uncond_covar(t)));
+    mu_term = &data.uncond_mean(t);
 
   } else {
     Q_use = &Q;
-
     // avoid wmaybe-uninitialized
     mu_term = nullptr;
 
@@ -404,34 +427,42 @@ compute_mu_n_Sigma_from_normal_apprx_w_particles(
 #endif
   for(unsigned int i = 0; i < size; ++i){
     mu_iterator iter = b + i;
-    arma::vec mu = Func::get_elem(iter);
+    const arma::vec &this_state = Func::get_elem(iter);
     auto inter = compute_mu_n_Sigma_from_normal_apprx
-      <densities, 5, false>(data, t, *Q_use, mu, r_set);
+      <densities, 5, false>(data, t, *Q_use, this_state, r_set);
 
-    mu = solve_w_precomputed_chol(Q.chol, mu) + inter.mu;
-    if(is_bw_w_use_prior)
-      mu += *mu_term;
+    arma::vec mu;
+    if(is_forward){
+      mu = data.state_trans->map(this_state).sv;
+      mu = solve_w_precomputed_chol(Q.chol, mu) + inter.mu;
+
+    } else {
+      mu = data.err_state_inv->map(this_state).sv;
+      mu = solve_w_precomputed_chol(Q.chol, mu);
+      mu = data.state_trans_inv->map(data.err_state->map(mu).sv).sv;
+      mu = data.err_state_inv->map(mu).sv      + inter.mu + *mu_term;
+
+    }
 
     mu = solve_w_precomputed_chol(inter.Sigma_inv_chol, mu);
 
-    ans[i].mu = std::move(mu);
-    ans[i].sigma_chol_inv = std::move(inter.sigma_chol_inv);
-    ans[i].Sigma_chol = std::move(inter.Sigma_chol);
+    std::swap(ans[i].mu, mu);
+    std::swap(ans[i].sigma_chol_inv, inter.sigma_chol_inv);
+    std::swap(ans[i].Sigma_chol, inter.Sigma_chol);
   }
 
-  if(is_bw_w_use_prior){
+  if(!is_forward){
     delete Q_use;
-    delete mu_term;
 
   }
 
   return ans;
 }
 
-template<typename densities, bool is_forward, bool use_prior_in_bw_filter = USE_PRIOR_IN_BW_FILTER_DEFAULT>
+template<typename densities, bool is_forward>
 static input_for_normal_apprx_w_particle_mean
 compute_mu_n_Sigma_from_normal_apprx_w_particles(
-  const PF_data &data, const unsigned int t, const covarmat &Q,
+  densities &dens_calc, const PF_data &data, const unsigned int t, const covarmat &Q,
   cloud &cl){
   struct Func{
     static inline const arma::vec get_elem(cloud::iterator &it){
@@ -441,15 +472,15 @@ compute_mu_n_Sigma_from_normal_apprx_w_particles(
 
   return(
     compute_mu_n_Sigma_from_normal_apprx_w_particles
-    <densities, cloud::iterator, Func, is_forward, use_prior_in_bw_filter>
-    (data, t, Q, cl.begin(), cl.size()));
+    <densities, cloud::iterator, Func, is_forward>
+    (dens_calc, data, t, Q, cl.begin(), cl.size()));
 }
 
-template<typename densities, bool is_forward, bool use_prior_in_bw_filter = USE_PRIOR_IN_BW_FILTER_DEFAULT>
+template<typename densities, bool is_forward>
 static input_for_normal_apprx_w_particle_mean
 compute_mu_n_Sigma_from_normal_apprx_w_particles(
-  const PF_data &data, const unsigned int t, const covarmat &Q,
-  std::vector<arma::vec> &mus){
+  densities &dens_calc, const PF_data &data, const unsigned int t, const covarmat &Q,
+  std::vector<arma::vec> &states){
   struct Func{
     static inline arma::vec& get_elem(std::vector<arma::vec>::iterator &it){
       return *it;
@@ -458,8 +489,8 @@ compute_mu_n_Sigma_from_normal_apprx_w_particles(
 
   return(
     compute_mu_n_Sigma_from_normal_apprx_w_particles
-    <densities, std::vector<arma::vec>::iterator, Func, is_forward, use_prior_in_bw_filter>
-    (data, t, Q, mus.begin(), mus.size()));
+    <densities, std::vector<arma::vec>::iterator, Func, is_forward>
+    (dens_calc, data, t, Q, states.begin(), states.size()));
 }
 
 /* ------------------------------------------- */
@@ -468,29 +499,39 @@ compute_mu_n_Sigma_from_normal_apprx_w_particles(
  Output class for smoothers
 */
 
-struct smoother_output {
+class smoother_output {
+public:
   struct pair {
     const particle *p;
     double log_weight;
 
-    // added to be able to use std::Vector<>::emplace_back
-    pair(particle *p, double log_weight):
-      p(p), log_weight(log_weight) {}
-
-    pair():
-      p(nullptr),
-      log_weight(std::numeric_limits<double>::quiet_NaN()) {}
+    pair(const particle *p = nullptr,
+         double log_weight = std::numeric_limits<double>::quiet_NaN());
   };
 
   struct particle_pairs {
-    std::vector<pair> transition_pairs;
     const particle *p;
+    double log_weight;
+    std::vector<pair> transition_pairs;
+
+    particle_pairs(const particle*, const double, std::vector<pair>&&);
+    particle_pairs(const particle*, const double);
+    particle_pairs();
   };
+
+  using trans_like_obj = std::vector<std::vector<particle_pairs>>;
 
   std::vector<cloud> forward_clouds;
   std::vector<cloud> backward_clouds;
   std::vector<cloud> smoothed_clouds;
-  std::vector<std::vector<particle_pairs>> transition_likelihoods;
+
+  smoother_output();
+
+  std::shared_ptr<trans_like_obj>
+    get_transition_likelihoods(const bool do_make_if_len_0 = false) const;
+
+private:
+  std::shared_ptr<trans_like_obj> transition_likelihoods;
 };
 
 Rcpp::List get_rcpp_list_from_cloud(
@@ -498,9 +539,21 @@ Rcpp::List get_rcpp_list_from_cloud(
 
 Rcpp::List get_rcpp_list_from_cloud(
     const std::vector<cloud> &clouds, const bool reverse,
-    unsigned int state_dim, const PF_data *data = nullptr);
+    const unsigned int state_dim, const PF_data *data = nullptr);
 
 smoother_output get_clouds_from_rcpp_list(const Rcpp::List &rcpp_list);
+
+struct PF_summary_stats_RW {
+  /* E[X_t] */
+  std::vector<arma::vec> E_xs;
+  /* E[(X_t - FX_{t-1})(X_t - FX_{t-1})^T] */
+  std::vector<arma::mat> E_x_less_x_less_one_outers;
+};
+
+PF_summary_stats_RW
+  compute_summary_stats_first_o_RW
+  (const smoother_output&, const arma::vec&, const arma::mat&,
+   const arma::mat&);
 
 #undef USE_PRIOR_IN_BW_FILTER_DEFAULT
 #undef MAX

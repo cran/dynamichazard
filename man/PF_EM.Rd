@@ -2,10 +2,10 @@
 % Please edit documentation in R/PF.R
 \name{PF_EM}
 \alias{PF_EM}
-\title{EM estimation with particle filters}
+\title{EM Estimation with Particle Filters and Smoothers}
 \usage{
 PF_EM(formula, data, model = "logit", by, max_T, id, a_0, Q_0, Q, order = 1,
-  control = list(), trace = 0)
+  control = PF_control(...), trace = 0, seed = NULL, ...)
 }
 \arguments{
 \item{formula}{\code{\link[survival]{coxph}} like formula with \code{\link[survival]{Surv}(tstart, tstop, event)} on the left hand site of \code{~}.}
@@ -31,6 +31,10 @@ PF_EM(formula, data, model = "logit", by, max_T, id, a_0, Q_0, Q, order = 1,
 \item{control}{list of control variables (see the control section below).}
 
 \item{trace}{argument to get progress information. Zero will yield no info and larger integer values will yield incrementally more information.}
+
+\item{seed}{seed to set at the start of every EM iteration.}
+
+\item{...}{optional way to pass arguments to \code{control}.}
 }
 \value{
 An object of class \code{PF_EM}.
@@ -41,23 +45,6 @@ Method to estimate the hyper parameters with an EM algorithm.
 \details{
 See \code{vignette("Particle_filtering", "dynamichazard")} for details.
 }
-\section{Control}{
-
-The \code{control} argument allows you to pass a \code{list} to select additional parameters. See \code{vignette("Particle_filtering", "dynamichazard")} for details. Unspecified elements of the list will yield default values.
-\describe{
-\item{\code{method}}{method for forward, backward and smoothing filter.}
-\item{\code{smoother}}{smoother to use.}
-\item{\code{N_fw_n_bw}}{number of particles to use in forward and backward filter.}
-\item{\code{N_first}}{number of particles to use at time \eqn{0} and time \eqn{d + 1}.}
-\item{\code{N_smooth}}{number of particles to use in particle smoother.}
-\item{\code{eps}}{convergence threshold in EM method.}
-\item{\code{n_max}}{maximum number of iterations of the EM algorithm.}
-\item{\code{n_threads}}{maximum number threads to use in the computations.}
-\item{\code{forward_backward_ESS_threshold}}{required effective sample size to not re-sample in the particle filters.}
-\item{\code{seed}}{seed to set at the start of every EM iteration.}
-}
-}
-
 \examples{
 #####
 # Fit model with lung data set from survival
@@ -72,12 +59,12 @@ pf_fit <- PF_EM(
  data = .lung, by = 50, id = 1:nrow(.lung),
  Q_0 = diag(1, 3), Q = diag(1, 3),
  max_T = 800,
- control = list(
+ control = PF_control(
    N_fw_n_bw = 500,
    N_first = 2500,
    N_smooth = 2500,
    n_max = 50,
-   n_threads = parallel::detectCores()),
+   n_threads = max(parallel::detectCores(logical = FALSE), 1)),
  trace = 1)
 
 # Plot state vector estimates
@@ -86,7 +73,8 @@ plot(pf_fit, cov_index = 2)
 plot(pf_fit, cov_index = 3)
 
 # Plot log-likelihood
-plot(pf_fit$log_likes)}
+plot(pf_fit$log_likes)
+}
 
 #####
 # Can be compared with this example from ?coxph in R 3.4.1. Though, the above
@@ -97,4 +85,57 @@ cox <- coxph(
  Surv(time, status) ~ ph.ecog + tt(age), data= .lung,
  tt=function(x,t,...) pspline(x + t/365.25))
 cox}
+
+
+\dontrun{
+######
+# example with fixed effects
+
+# prepare data
+temp <- subset(pbc, id <= 312, select=c(id, sex, time, status, edema, age))
+pbc2 <- tmerge(temp, temp, id=id, death = event(time, status))
+pbc2 <- tmerge(pbc2, pbcseq, id=id, albumin = tdc(day, albumin),
+              protime = tdc(day, protime), bili = tdc(day, bili))
+pbc2 <- pbc2[, c("id", "tstart", "tstop", "death", "sex", "edema",
+                "age", "albumin", "protime", "bili")]
+pbc2 <- within(pbc2, {
+ log_albumin <- log(albumin)
+ log_protime <- log(protime)
+ log_bili <- log(bili)
+})
+
+# standardize
+for(c. in c("age", "log_albumin", "log_protime", "log_bili"))
+ pbc2[[c.]] <- drop(scale(pbc2[[c.]]))
+
+# fit model with extended Kalman filter
+ddfit <- ddhazard(
+ Surv(tstart, tstop, death == 2) ~ ddFixed_intercept() + ddFixed(age) +
+   ddFixed(edema) + ddFixed(log_albumin) + ddFixed(log_protime) + log_bili,
+ pbc2, Q_0 = 100, Q = 1e-2, by = 100, id = pbc2$id,
+ model = "exponential", max_T = 3600,
+ control = list(eps = 1e-5, NR_eps = 1e-4, n_max = 1e4))
+summary(ddfit)
+
+# fit model with particle filter
+set.seed(88235076)
+ppfit <- PF_EM(
+ Surv(tstart, tstop, death == 2) ~ ddFixed_intercept() + ddFixed(age) +
+   ddFixed(edema) + ddFixed(log_albumin) + ddFixed(log_protime) + log_bili,
+ pbc2, Q_0 = 100, Q = ddfit$Q * 100, # use estimate from before
+ by = 100, id = pbc2$id,
+ model = "exponential", max_T = 3600,
+ control = PF_control(
+   N_fw_n_bw = 250, N_smooth = 500, N_first = 1000, eps = 1e-3,
+   method = "AUX_normal_approx_w_cloud_mean",
+   n_max = 25, # just take a few iterations as an example
+   n_threads = max(parallel::detectCores(logical = FALSE), 1), trace = TRUE)
+
+# compare results
+plot(ddfit)
+plot(ppfit)
+sqrt(ddfit$Q * 100)
+sqrt(ppfit$Q)
+rbind(ddfit$fixed_effects, ppfit$fixed_effects)
+}
 }

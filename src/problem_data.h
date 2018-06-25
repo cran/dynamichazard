@@ -2,104 +2,59 @@
 #define DDHAZARD_DATA
 
 #include "arma_n_rcpp.h"
+#include "arma_BLAS_LAPACK.h"
+#include "lin_maps.h"
 #include <future>
 #include <type_traits>
+#include <memory>
 
 #ifdef _OPENMP
 #include <omp.h>
 #endif
 
-/* Object used for map function. We keep a unique pointer to a new object if it
- * is created in the function to make sure the orginal object is
- not destructed. */
-template <typename T_view, typename T_type>
-class map_res {
-  using ptr_T = std::unique_ptr<T_type>;
-
-public:
-  T_view sv; /* sv for (s)ub(v)iew */
-  ptr_T org_ptr;
-
-  map_res(T_view sv): sv(sv) {}
-  map_res(T_view sv, ptr_T &ptr): sv(sv) {
-    org_ptr = std::move(ptr);
-  }
-};
-
-using map_res_col = map_res<arma::subview_col<double>, arma::vec>;
-using map_res_mat = map_res<arma::subview<double>, arma::mat>;
-
-enum side { left, both, right };
-
 class problem_data {
 protected:
-  const arma::mat &F_;
-  const arma::mat &R;
-  const arma::mat &L;
-  const arma::vec &m;
-
-  using ptr_vec = std::unique_ptr<arma::vec>;
-  using ptr_mat = std::unique_ptr<arma::mat>;
-
-  /* matrix maps */
-  static map_res_mat
-    mat_map
-    (const arma::mat &dsn_mat, const arma::mat &M, side s, bool tranpose){
-      ptr_mat ptr;
-
-      if(tranpose){
-        switch(s){
-        case  left:
-          ptr.reset(new arma::mat(dsn_mat.t() * M));
-          break;
-        case both:
-          ptr.reset(new arma::mat(dsn_mat.t() * M * dsn_mat));
-          break;
-        case right:
-          ptr.reset(new arma::mat(              M * dsn_mat));
-          break;
-        default:
-          Rcpp::stop("'Side' not implemented");
-        }
-      } else
-        switch(s){
-        case  left:
-          ptr.reset(new arma::mat(dsn_mat * M));
-          break;
-        case both:
-          ptr.reset(new arma::mat(dsn_mat * M * dsn_mat.t()));
-          break;
-        case right:
-          ptr.reset(new arma::mat(          M * dsn_mat.t()));
-          break;
-        default:
-          Rcpp::stop("'Side' not implemented");
-        }
-
-      arma::mat &out = *ptr.get();
-      return map_res_mat(out(arma::span::all, arma::span::all), ptr);
-    }
-
-  /* vector maps */
-  virtual map_res_col err_state_map(arma::vec &a, ptr_vec &ptr){
-    ptr.reset(new arma::vec(R * a));
-    arma::vec &out = *ptr.get();
-    return map_res_col(out(arma::span::all), ptr);
+  virtual
+  std::unique_ptr<linear_mapper> set_state_trans(const arma::mat &F){
+    return std::unique_ptr<dens_mapper>(new dens_mapper(F));
   }
-  virtual map_res_col state_trans_map(arma::vec &a, ptr_vec &ptr){
-    ptr.reset(new arma::vec(F_ * a + m));
-    arma::vec &out = *ptr.get();
-    return map_res_col(out(arma::span::all), ptr);
+
+  virtual
+  std::unique_ptr<linear_mapper> set_state_trans_inv(const arma::mat &F){
+    return std::unique_ptr<inv_mapper>(new inv_mapper(F));
   }
-  virtual map_res_col lp_map(arma::vec &a, ptr_vec &ptr){
-    ptr.reset(new arma::vec(L * a));
-    arma::vec &out = *ptr.get();
-    return map_res_col(out(arma::span::all), ptr);
+
+  virtual
+  std::unique_ptr<linear_mapper> set_state_trans_err
+  (const arma::mat &F, const arma::mat R){
+    arma::mat tmp = R.t() * F;
+    return std::unique_ptr<dens_mapper>(new dens_mapper(tmp));
   }
-  virtual map_res_col lp_map_inv(arma::vec &a, ptr_vec &ptr){
-    ptr.reset(new arma::vec(L.t() * a));
-    arma::vec &out = *ptr.get();
-    return map_res_col(out(arma::span::all), ptr);
+
+  virtual
+  std::unique_ptr<linear_mapper> set_state_trans_err_inv
+  (const arma::mat &F, const arma::mat R){
+    return std::unique_ptr<inv_sub_mapper>(new inv_sub_mapper(F, R));
+  }
+
+  virtual
+  std::unique_ptr<linear_mapper> set_err_state(const arma::mat &R){
+    return std::unique_ptr<select_mapper>(new select_mapper(R));
+  }
+
+  virtual
+  std::unique_ptr<linear_mapper> set_err_state_inv(const arma::mat &R){
+    return std::unique_ptr<select_mapper>(new select_mapper(arma::mat(R.t())));
+  }
+
+  virtual
+  std::unique_ptr<linear_mapper> set_state_lp(const arma::mat &L){
+    return std::unique_ptr<select_mapper>(new select_mapper(L));
+  }
+
+  virtual
+  std::unique_ptr<linear_mapper> set_state_lp_inv(const arma::mat &L){
+    return std::unique_ptr<select_mapper>(new select_mapper(arma::mat(L.t())));
   }
 
 public:
@@ -111,12 +66,16 @@ public:
   const int d;
   const Rcpp::List risk_sets;
 
-  const unsigned int space_dim; // dimension of state space vector
+  const unsigned int state_dim; // dimension of state space vector
   const unsigned int covar_dim; // dimension of dynamic covariate vector
+  const unsigned int err_dim;   // dimension of state space error term
   const int n_params_state_vec_fixed; // TODO: maybe move to derived class
 
+  /* these are not const due the arma::mat constructor which does not allow
+   * copy_aux_mem = false with const pointer. They should not be changed
+   * though...                                                              */
   arma::mat X;
-  arma::mat fixed_terms; // used if fixed terms are estimated in the M-step
+  arma::mat fixed_terms;
 
   const std::vector<double> I_len;
 
@@ -131,6 +90,21 @@ public:
   // non-constants
   arma::mat &Q;
   arma::mat &Q_0;
+  arma::vec fixed_parems;
+  arma::vec fixed_effects;
+
+  // maps
+  const std::unique_ptr<linear_mapper> state_trans;
+  const std::unique_ptr<linear_mapper> state_trans_inv;
+  const std::unique_ptr<linear_mapper> state_trans_err;
+  const std::unique_ptr<linear_mapper> state_trans_err_inv;
+
+  const std::unique_ptr<linear_mapper> err_state;
+  const std::unique_ptr<linear_mapper> err_state_inv;
+
+  /* here to allow for fixed effects in E-step */
+  const std::unique_ptr<linear_mapper> state_lp;
+  const std::unique_ptr<linear_mapper> state_lp_inv;
 
   problem_data(
     const int n_fixed_terms_in_state_vec,
@@ -141,15 +115,14 @@ public:
     const arma::colvec &a_0,
     const arma::mat &R,
     const arma::mat &L,
-    const arma::vec &m,
+    const arma::vec &m, // TODO: remove
     arma::mat &Q_0,
     arma::mat &Q,
     const Rcpp::List &risk_obj,
     const arma::mat &F_,
     const int n_max,
-    const int n_threads) :
-    F_(F_), R(R), L(L), m(m),
-
+    const int n_threads,
+    const arma::vec &fixed_parems) :
     any_dynamic(X.n_elem > 0),
     any_fixed_in_E_step(n_fixed_terms_in_state_vec > 0),
     any_fixed_in_M_step(fixed_terms.n_elem > 0),
@@ -157,12 +130,14 @@ public:
     d(Rcpp::as<int>(risk_obj["d"])),
     risk_sets(Rcpp::as<Rcpp::List>(risk_obj["risk_sets"])),
 
-    space_dim(a_0.size()),
+    state_dim(a_0.size()),
     covar_dim(X.n_rows),
+    err_dim(Q.n_cols),
     n_params_state_vec_fixed(n_fixed_terms_in_state_vec),
 
     X(X.begin(), X.n_rows, X.n_cols, false),
-    fixed_terms(fixed_terms.begin(), fixed_terms.n_rows, fixed_terms.n_cols, false),
+    fixed_terms(fixed_terms.begin(), fixed_terms.n_rows,
+                fixed_terms.n_cols, false),
     I_len(Rcpp::as<std::vector<double> >(risk_obj["I_len"])),
 
     n_threads((n_threads > 0) ? n_threads : std::thread::hardware_concurrency()),
@@ -173,7 +148,23 @@ public:
     min_start(Rcpp::as<double>(risk_obj["min_start"])),
 
     Q(Q),
-    Q_0(Q_0)
+    Q_0(Q_0),
+    fixed_parems(fixed_parems),
+    fixed_effects(
+      (any_fixed_in_M_step) ?
+                fixed_terms.t() * fixed_parems :
+                arma::vec(X.n_cols, arma::fill::zeros)),
+
+    state_trans(set_state_trans(F_)),
+    state_trans_inv(set_state_trans_inv(F_)),
+    state_trans_err(set_state_trans_err(F_, R)),
+    state_trans_err_inv(set_state_trans_err_inv(F_, R)),
+
+    err_state(set_err_state(R)),
+    err_state_inv(set_err_state_inv(R)),
+
+    state_lp(set_state_lp(L)),
+    state_lp_inv(set_state_lp_inv(L))
   {
 #ifdef _OPENMP
     omp_set_num_threads(n_threads);
@@ -185,134 +176,59 @@ public:
   problem_data(const problem_data&) = delete;
   problem_data() = delete;
 
-  /* maps previous to next state */
-  map_res_col state_trans_map(arma::subview_col<double> a){
-    ptr_vec ptr(new arma::vec(&a.at(0, 0), a.n_rows, false));
-    return state_trans_map(*ptr.get(), ptr);
-  }
-  map_res_col state_trans_map(arma::vec &a){
-    ptr_vec ptr;
-    return state_trans_map(a, ptr);
-  }
-  virtual map_res_mat state_trans_map(arma::mat &M, side s = both){
-    return mat_map(F_, M, s, false);
-  }
-
-  /* maps from errors to state space dimension */
-  map_res_col err_state_map(arma::subview_col<double> a){
-    ptr_vec ptr(new arma::vec(&a.at(0, 0), a.n_rows, false));
-    return err_state_map(*ptr.get(), ptr);
-  }
-  map_res_col err_state_map(arma::vec &a){
-    ptr_vec ptr;
-    return err_state_map(a, ptr);
-  }
-  virtual map_res_mat err_state_map(arma::mat &M, side s = both){
-    return mat_map(R, M, s, false);
-  }
-
-  /* inverse of the above */
-  virtual map_res_mat err_state_map_inv(arma::mat &M, side s = both){
-    return mat_map(R, M, s, true);
-  }
-
-  /* maps from state space dimension to covariate dimension */
-  map_res_col lp_map(arma::subview_col<double> a){
-    ptr_vec ptr(new arma::vec(&a.at(0, 0), a.n_rows, false));
-    return lp_map(*ptr.get(), ptr);
-  }
-  map_res_col lp_map(arma::vec &a){
-    ptr_vec ptr;
-    return lp_map(a, ptr);
-  }
-  virtual map_res_mat lp_map(arma::mat &M, side s = both){
-    return mat_map(L, M, s, false);
-  }
-
-  /* inverse of the above */
-  map_res_col lp_map_inv(arma::subview_col<double> a){
-    ptr_vec ptr(new arma::vec(&a.at(0, 0), a.n_rows, false));
-    return lp_map_inv(*ptr.get(), ptr);
-  }
-  map_res_col lp_map_inv(arma::vec &a){
-    ptr_vec ptr;
-    return lp_map_inv(a, ptr);
-  }
-  virtual map_res_mat lp_map_inv(arma::mat &M, side s = both){
-    return mat_map(L, M, s, true);
-  }
+  // create a virtual, default destructor
+  virtual ~problem_data() = default;
 };
 
 /* Concrete class for n-th order random walk model starting with problem data
  * for n-th order random walk */
+/* TODO: implement more overrides */
+
 template<class T>
 class random_walk : public T {
-  std::unique_ptr<arma::span> span_current_cov(){
-    std::unique_ptr<arma::span> out;
-    if(this->any_dynamic || this->any_fixed_in_E_step){
-      out.reset(new arma::span(
-          0,
-          (this->space_dim - this->n_params_state_vec_fixed) / order() +
-            this->n_params_state_vec_fixed - 1));
-    }
+public:
+  const unsigned int order {
+    (this->state_dim - this->n_params_state_vec_fixed == 0) ?
+    1 :
+    (this->state_dim - this->n_params_state_vec_fixed) /
+      (this->covar_dim - this->n_params_state_vec_fixed)
+  };
 
-    return out;
+private:
+
+  std::unique_ptr<linear_mapper> set_state_trans(const arma::mat &F) override {
+    if(order == 1)
+      return std::unique_ptr<select_mapper>(new select_mapper(F));
+
+    return T::set_state_trans(F);
   }
 
-  using ptr_vec = std::unique_ptr<arma::vec>;
-  using ptr_mat = std::unique_ptr<arma::mat>;
+  std::unique_ptr<linear_mapper> set_state_trans_inv
+  (const arma::mat &F) override {
+    if(order == 1)
+      return std::unique_ptr<select_mapper>(new select_mapper(F));
 
-  /* derived class functions to override */
-  map_res_col lp_map(arma::vec &a, ptr_vec &ptr) override {
-    auto span_use = (order() == 1) ? arma::span::all : *span_current_cov();
-    return map_res_col(a(span_use), ptr);
+    return T::set_state_trans_inv(F);
   }
 
-  map_res_col lp_map_inv(arma::vec &a, ptr_vec &ptr) override {
-    if(order() == 1)
-      return map_res_col(a(arma::span::all), ptr);
+  std::unique_ptr<linear_mapper> set_state_trans_err
+  (const arma::mat &F, const arma::mat R) override {
+    if(order == 1)
+      return std::unique_ptr<select_mapper>(new select_mapper(F));
 
-    ptr_vec ptr_new(new arma::vec(this->space_dim, arma::fill::zeros));
-    arma::vec &out = *ptr_new.get();
-    out(*span_current_cov()) = a;
+    return T::set_state_trans_err(F, R);
+  }
 
-    return map_res_col(out(arma::span::all), ptr_new);
+  std::unique_ptr<linear_mapper> set_state_trans_err_inv
+  (const arma::mat &F, const arma::mat R) override {
+    if(order == 1)
+      return std::unique_ptr<select_mapper>(new select_mapper(F));
+
+    return T::set_state_trans_err_inv(F, R);
   }
 
 public:
   using T::T;
-
-  /* particular class function */
-  unsigned int order(){
-    unsigned int numerator = this->space_dim - this->n_params_state_vec_fixed;
-    if(numerator == 0)
-      return 1;
-
-    return numerator / (this->covar_dim - this->n_params_state_vec_fixed);
-  }
-
-  /* derived class functions to override */
-  map_res_mat lp_map(arma::mat &M, side s = both) override {
-    if(s != both)
-      Rcpp::stop("'Side' not implemented");
-
-    auto span_use = (order() == 1) ? arma::span::all : *span_current_cov();
-    return map_res_mat(M(span_use, span_use));
-  }
-
-  map_res_mat lp_map_inv(arma::mat &M, side s = both) override {
-    if(s != both)
-      Rcpp::stop("'Side' not implemented");
-
-    if(order() == 1)
-      return map_res_mat(M(arma::span::all, arma::span::all));
-
-    ptr_mat ptr(new arma::mat(this->space_dim, this->space_dim, arma::fill::zeros));
-    arma::mat &out = *ptr.get();
-    out(*span_current_cov(), *span_current_cov()) = M;
-
-    return map_res_mat(out(arma::span::all, arma::span::all), ptr);
-  }
 };
 
 
@@ -338,7 +254,6 @@ public:
   const bool use_pinv;
 
   // Declare non constants. Some are intialize
-  arma::vec fixed_parems;
   arma::mat a_t_t_s;
   arma::mat a_t_less_s;
 
@@ -392,7 +307,8 @@ public:
       risk_obj,
       F_,
       n_max,
-      n_threads),
+      n_threads,
+      fixed_parems_start),
     weights(weights),
 
     event_eps(d * std::numeric_limits<double>::epsilon()),
@@ -403,22 +319,21 @@ public:
     debug(debug),
     LR(LR.isNotNull() ? Rcpp::as< Rcpp::NumericVector >(LR)[0] : 1.0),
 
-    use_pinv(use_pinv),
-    fixed_parems(fixed_parems_start)
+    use_pinv(use_pinv)
   {
     if(debug)
       Rcpp::Rcout << "Using " << n_threads << " threads" << std::endl;
 
     if(any_dynamic || any_fixed_in_E_step){
-      a_t_t_s = arma::mat(space_dim, d + 1);
-      a_t_less_s = arma::mat(space_dim, d);
-      V_t_t_s = arma::cube(space_dim, space_dim, d + 1);
-      V_t_less_s = arma::cube(space_dim, space_dim, d);
-      B_s = arma::cube(space_dim, space_dim, d);
+      a_t_t_s = arma::mat(state_dim, d + 1);
+      a_t_less_s = arma::mat(state_dim, d);
+      V_t_t_s = arma::cube(state_dim, state_dim, d + 1);
+      V_t_less_s = arma::cube(state_dim, state_dim, d);
+      B_s = arma::cube(state_dim, state_dim, d);
 
       a_t_t_s.col(0) = a_0;
 
-      lag_one_cov = arma::cube(space_dim, space_dim, d);
+      lag_one_cov = arma::cube(state_dim, state_dim, d);
     }
   }
 

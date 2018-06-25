@@ -95,8 +95,27 @@ arma::vec round_if_almost_eq(
 
   double bound_abs = std::abs(*it_bound);
   bool is_relative_test = bound_abs > threshold;
+  bool is_first_it = true;
+  arma::uword idx_max = x.n_elem - 1L;
+  double x_old;
   for(auto i = x_ord.begin(); i != x_ord.end(); ++i){
+    if(*i > idx_max)
+      Rcpp::stop("`x_ord` out of bounds");
+
     double *this_x = x_out_begin + *i;
+
+    /* check x_ord gives the correct order */
+    if(is_first_it){
+      is_first_it = false;
+
+    } else {
+      if(*this_x < x_old)
+        Rcpp::stop("`x_ord` does not seem to give the correct order of `x`");
+
+    }
+    x_old = *this_x;
+
+    /* compute test value */
     double test_val =
       is_relative_test ?
       (*this_x - *it_bound) / bound_abs :
@@ -121,4 +140,86 @@ arma::vec round_if_almost_eq(
   }
 
   return x_out;
+}
+
+// [[Rcpp::export]]
+arma::vec rep_vec(const arma::vec &col_vals, int n_rows){
+  int n_cols = col_vals.n_elem;
+  arma::vec out(n_rows * n_cols);
+
+  const double *v = col_vals.memptr();
+  double *o = out.memptr();
+  for(int j = 0; j < n_cols; ++j, ++v)
+    for(int i = 0; i < n_rows; ++i, ++o)
+      *o = *v;
+
+  return out;
+}
+
+
+selection_matrix::selection_matrix(const arma::mat &A):
+  n(A.n_rows), m(A.n_cols), A(A) {
+  std::vector<arma::uword> idx_m_val;
+  std::vector<arma::uword> idx_n_val;
+
+  const double *a = A.memptr();
+  for(arma::uword j = 0; j < m; ++j){
+    bool found_one = false;
+
+    for(arma::uword i = 0; i < n; ++i, ++a){
+      if(*a < 1 - 3e-16 || 1 + 3e-16 < *a)
+        continue;
+      if(found_one)
+        Rcpp::stop("A does not seem to be a selection matrix.");
+
+      idx_n_val.push_back(i);
+      idx_m_val.push_back(j);
+
+      found_one = true;
+    }
+  }
+
+  idx_n.reset(new arma::uvec(idx_n_val));
+  idx_m.reset(new arma::uvec(idx_m_val));
+}
+
+arma::vec selection_matrix::map(const arma::vec &x) const{
+  arma::vec out(n, arma::fill::zeros);
+
+  out(*idx_n.get()) = x(*idx_m.get());
+
+  return out;
+}
+
+arma::mat selection_matrix::map(
+    const arma::mat &x, const bool is_right) const {
+  if(!is_right){
+    arma::mat out(n, x.n_cols, arma::fill::zeros);
+    out.rows(*idx_n.get()) = x.rows(*idx_m.get());
+    return out;
+  }
+
+  arma::mat out(x.n_rows, n, arma::fill::zeros);
+  out.cols(*idx_n.get()) = x.cols(*idx_m.get());
+  return out;
+}
+
+arma::vec selection_matrix::map_inv(const arma::vec &x) const {
+  arma::vec out(m, arma::fill::zeros);
+  out(*idx_m.get()) = x(*idx_n.get());
+
+  return out;
+}
+
+arma::mat selection_matrix::map_inv(
+    const arma::mat &x, const bool is_right) const {
+  if(!is_right){
+    arma::mat out(m, x.n_cols, arma::fill::zeros);
+    out.rows(*idx_m.get()) = x.rows(*idx_n.get());
+    return out;
+  }
+
+  arma::mat out(x.n_rows, m, arma::fill::zeros);
+  out.cols(*idx_m.get()) = x.cols(*idx_n.get());
+  return out;
 }

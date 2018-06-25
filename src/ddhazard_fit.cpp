@@ -45,7 +45,7 @@ Rcpp::List ddhazard_fit_cpp(
     const bool use_pinv = false,
     const std::string criteria = "delta_coef",
     const std::string posterior_version = "cholesky",
-    const signed int GMA_max_rep = 10,
+    const unsigned int GMA_max_rep = 10,
     const double GMA_NR_eps = 0.1,
     const int EKF_batch_size = 5000L){
   if(Rcpp::as<bool>(risk_obj["is_for_discrete_model"]) &&
@@ -171,7 +171,7 @@ Rcpp::List ddhazard_fit_cpp(
   }
 
   const unsigned int order =
-    dynamic_cast<random_walk<ddhazard_data>*>(p_data.get())->order();
+    dynamic_cast<random_walk<ddhazard_data>*>(p_data.get())->order;
 
   // main loop for estimation
   do
@@ -188,8 +188,8 @@ Rcpp::List ddhazard_fit_cpp(
       my_print(*p_data.get(), p_data->Q, "Q");
     }
 
-    if((it + 1) % 25 == 0)
-      Rcpp::checkUserInterrupt(); // this is expensive (on Windows)
+    if((it + 1) % 5 == 0)
+      Rcpp::checkUserInterrupt();
 
     if(p_data->any_dynamic){
       p_data->V_t_t_s.slice(0) = Q_0; // Q_0 may have been updated or not
@@ -213,9 +213,9 @@ Rcpp::List ddhazard_fit_cpp(
                   p_data->B_s.slice(t - 1).t();
         }
 
-        p_data->a_t_t_s.col(t) = p_data->a_t_t_s.unsafe_col(t) +
+        p_data->a_t_t_s.col(t) = p_data->a_t_t_s.col(t) +
           p_data->B_s.slice(t) *
-          (p_data->a_t_t_s.unsafe_col(t + 1) - p_data->a_t_less_s.unsafe_col(t));
+          (p_data->a_t_t_s.col(t + 1) - p_data->a_t_less_s.col(t));
         p_data->V_t_t_s.slice(t) = p_data->V_t_t_s.slice(t) +
           p_data->B_s.slice(t) * (p_data->V_t_t_s.slice(t + 1) -
           p_data->V_t_less_s.slice(t)) * p_data->B_s.slice(t).t();
@@ -247,15 +247,15 @@ Rcpp::List ddhazard_fit_cpp(
         V = &p_data->V_t_t_s.slice(t);
         a_less = p_data->a_t_t_s.unsafe_col(t - 1);
         a = p_data->a_t_t_s.unsafe_col(t);
-        arma::vec a_dt(a - p_data->state_trans_map(a_less).sv);
+        arma::vec a_dt(a - p_data->state_trans->map(a_less).sv);
 
         if(M_step_formulation == "Fahrmier94"){
           B = &p_data->B_s.slice(t - 1);
 
           Q += ((a_dt * a_dt.t()) + *V
-                  - p_data->state_trans_map(*B, left).sv * *V
-                  - *V * p_data->state_trans_map(*B, left).sv.t()
-                  + p_data->state_trans_map(*V_less).sv) / delta_t;
+                  - p_data->state_trans->map(*B, left).sv * *V
+                  - *V * p_data->state_trans->map(*B, left).sv.t()
+                  + p_data->state_trans->map(*V_less).sv) / delta_t;
 
         } else if (M_step_formulation == "SmoothedCov"){
           /* this is not B but the lagged one smooth correlation.
@@ -263,18 +263,19 @@ Rcpp::List ddhazard_fit_cpp(
           B = &p_data->lag_one_cov.slice(t - 1);
 
           Q += ((a_dt * a_dt.t()) + *V
-                  - p_data->state_trans_map(*B, left).sv
-                  - p_data->state_trans_map(*B, left).sv.t()
-                  + p_data->state_trans_map(*V_less).sv) / delta_t;
+                  - p_data->state_trans->map(*B, left).sv
+                  - p_data->state_trans->map(*B, left).sv.t()
+                  + p_data->state_trans->map(*V_less).sv) / delta_t;
         } else
           Rcpp::stop("'M_step_formulation' of type '" +
             M_step_formulation + "' is not implemented");
 
       }
       Q /= p_data->d;
-      Q = p_data->err_state_map_inv(Q).sv;
+      Q = p_data->err_state_inv->map(Q).sv;
 
-      if((test_max_diff = static_cast<arma::mat>(Q - Q.t()).max()) >
+      if(Q.n_elem > 0 and
+           (test_max_diff = static_cast<arma::mat>(Q - Q.t()).max()) >
            Q_warn_eps){
         std::ostringstream warning;
         warning << "Q - Q.t() maximal element difference was " << test_max_diff <<
@@ -307,8 +308,8 @@ Rcpp::List ddhazard_fit_cpp(
         arma::mat a1(p_data->covar_dim, a_prev.n_cols);
         arma::mat a2(p_data->covar_dim, a_prev.n_cols);
         for(arma::uword i = 0; i < a_prev.n_cols; ++i){
-          a1.col(i) = p_data->lp_map(a_prev.col(i)).sv;
-          a2.col(i) = p_data->lp_map(p_data->a_t_t_s.col(i)).sv;
+          a1.col(i) = p_data->state_lp->map(a_prev.col(i)).sv;
+          a2.col(i) = p_data->state_lp->map(p_data->a_t_t_s.col(i)).sv;
         }
 
         conv_values.push_back(conv_criteria(a1, a2));
@@ -332,6 +333,9 @@ Rcpp::List ddhazard_fit_cpp(
       } else
         Rcpp::stop("Fixed effects is not implemented for '" + model  +"'");
 
+      // update fixed effects
+      p_data->fixed_effects = p_data->fixed_terms.t() * p_data->fixed_parems;
+
       if(criteria == "delta_coef")
         *(conv_values.end() -1) += conv_criteria(old, p_data->fixed_parems);
 
@@ -342,17 +346,14 @@ Rcpp::List ddhazard_fit_cpp(
       arma::mat varying_only_a = p_data->a_t_t_s; // take copy
       arma::vec fixed_effects_offsets;
 
-      if(p_data->any_fixed_in_M_step){
-        fixed_effects_offsets = p_data->fixed_terms.t() * p_data->fixed_parems;
-
-      } else if(p_data->any_fixed_in_E_step){
+      if(p_data->any_fixed_in_E_step){
         fixed_effects_offsets =
           p_data->X(span_fixed_params, arma::span::all).t() *
           p_data->a_t_t_s(span_fixed_params, arma::span::all).col(0);
         varying_only_a.shed_rows(span_fixed_params.a, span_fixed_params.b);
 
       } else
-        fixed_effects_offsets = arma::vec(p_data->X.n_cols, arma::fill::zeros);
+        fixed_effects_offsets = p_data->fixed_effects;
 
       arma::span span_only_varying(
           0, p_data->covar_dim - p_data->n_params_state_vec_fixed - 1);

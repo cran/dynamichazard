@@ -1,7 +1,3 @@
-if(getRversion() >= "2.15.1")
-  utils::globalVariables(c(".F", "L", "R", "m"))
-
-
 PF_effective_sample_size <- function(object){
   sapply(object[
     c("forward_clouds", "backward_clouds", "smoothed_clouds")],
@@ -11,30 +7,17 @@ PF_effective_sample_size <- function(object){
   })
 }
 
-#' @title EM estimation with particle filters
+#' @title EM Estimation with Particle Filters and Smoothers
 #' @description Method to estimate the hyper parameters with an EM algorithm.
 #'
 #' @inheritParams ddhazard
 #' @param trace argument to get progress information. Zero will yield no info and larger integer values will yield incrementally more information.
 #' @param model either \code{'logit'} for binary outcomes or \code{'exponential'} for piecewise constant exponential distributed arrival times.
+#' @param seed seed to set at the start of every EM iteration.
+#' @param ... optional way to pass arguments to \code{control}.
 #'
 #' @details
 #' See \code{vignette("Particle_filtering", "dynamichazard")} for details.
-#'
-#' @section Control:
-#' The \code{control} argument allows you to pass a \code{list} to select additional parameters. See \code{vignette("Particle_filtering", "dynamichazard")} for details. Unspecified elements of the list will yield default values.
-#' \describe{
-#' \item{\code{method}}{method for forward, backward and smoothing filter.}
-#' \item{\code{smoother}}{smoother to use.}
-#' \item{\code{N_fw_n_bw}}{number of particles to use in forward and backward filter.}
-#' \item{\code{N_first}}{number of particles to use at time \eqn{0} and time \eqn{d + 1}.}
-#' \item{\code{N_smooth}}{number of particles to use in particle smoother.}
-#' \item{\code{eps}}{convergence threshold in EM method.}
-#' \item{\code{n_max}}{maximum number of iterations of the EM algorithm.}
-#' \item{\code{n_threads}}{maximum number threads to use in the computations.}
-#' \item{\code{forward_backward_ESS_threshold}}{required effective sample size to not re-sample in the particle filters.}
-#' \item{\code{seed}}{seed to set at the start of every EM iteration.}
-#'}
 #'
 #' @return
 #' An object of class \code{PF_EM}.
@@ -53,12 +36,12 @@ PF_effective_sample_size <- function(object){
 #'  data = .lung, by = 50, id = 1:nrow(.lung),
 #'  Q_0 = diag(1, 3), Q = diag(1, 3),
 #'  max_T = 800,
-#'  control = list(
+#'  control = PF_control(
 #'    N_fw_n_bw = 500,
 #'    N_first = 2500,
 #'    N_smooth = 2500,
 #'    n_max = 50,
-#'    n_threads = parallel::detectCores()),
+#'    n_threads = max(parallel::detectCores(logical = FALSE), 1)),
 #'  trace = 1)
 #'
 #'# Plot state vector estimates
@@ -67,7 +50,8 @@ PF_effective_sample_size <- function(object){
 #'plot(pf_fit, cov_index = 3)
 #'
 #'# Plot log-likelihood
-#'plot(pf_fit$log_likes)}
+#'plot(pf_fit$log_likes)
+#'}
 #'
 #'#####
 #'# Can be compared with this example from ?coxph in R 3.4.1. Though, the above
@@ -78,15 +62,63 @@ PF_effective_sample_size <- function(object){
 #'  Surv(time, status) ~ ph.ecog + tt(age), data= .lung,
 #'  tt=function(x,t,...) pspline(x + t/365.25))
 #'cox}
+#'
+#'
+#'\dontrun{
+#'######
+#'# example with fixed effects
+#'
+#'# prepare data
+#'temp <- subset(pbc, id <= 312, select=c(id, sex, time, status, edema, age))
+#'pbc2 <- tmerge(temp, temp, id=id, death = event(time, status))
+#'pbc2 <- tmerge(pbc2, pbcseq, id=id, albumin = tdc(day, albumin),
+#'               protime = tdc(day, protime), bili = tdc(day, bili))
+#'pbc2 <- pbc2[, c("id", "tstart", "tstop", "death", "sex", "edema",
+#'                 "age", "albumin", "protime", "bili")]
+#'pbc2 <- within(pbc2, {
+#'  log_albumin <- log(albumin)
+#'  log_protime <- log(protime)
+#'  log_bili <- log(bili)
+#'})
+#'
+#'# standardize
+#'for(c. in c("age", "log_albumin", "log_protime", "log_bili"))
+#'  pbc2[[c.]] <- drop(scale(pbc2[[c.]]))
+#'
+#'# fit model with extended Kalman filter
+#'ddfit <- ddhazard(
+#'  Surv(tstart, tstop, death == 2) ~ ddFixed_intercept() + ddFixed(age) +
+#'    ddFixed(edema) + ddFixed(log_albumin) + ddFixed(log_protime) + log_bili,
+#'  pbc2, Q_0 = 100, Q = 1e-2, by = 100, id = pbc2$id,
+#'  model = "exponential", max_T = 3600,
+#'  control = list(eps = 1e-5, NR_eps = 1e-4, n_max = 1e4))
+#'summary(ddfit)
+#'
+#'# fit model with particle filter
+#'set.seed(88235076)
+#'ppfit <- PF_EM(
+#'  Surv(tstart, tstop, death == 2) ~ ddFixed_intercept() + ddFixed(age) +
+#'    ddFixed(edema) + ddFixed(log_albumin) + ddFixed(log_protime) + log_bili,
+#'  pbc2, Q_0 = 100, Q = ddfit$Q * 100, # use estimate from before
+#'  by = 100, id = pbc2$id,
+#'  model = "exponential", max_T = 3600,
+#'  control = PF_control(
+#'    N_fw_n_bw = 250, N_smooth = 500, N_first = 1000, eps = 1e-3,
+#'    method = "AUX_normal_approx_w_cloud_mean",
+#'    n_max = 25, # just take a few iterations as an example
+#'    n_threads = max(parallel::detectCores(logical = FALSE), 1), trace = TRUE)
+#'
+#'# compare results
+#'plot(ddfit)
+#'plot(ppfit)
+#'sqrt(ddfit$Q * 100)
+#'sqrt(ppfit$Q)
+#'rbind(ddfit$fixed_effects, ppfit$fixed_effects)
+#'}
 #' @export
 PF_EM <- function(
-  formula, data,
-  model = "logit",
-  by, max_T, id,
-  a_0, Q_0, Q,
-  order = 1,
-  control = list(),
-  trace = 0){
+  formula, data, model = "logit", by, max_T, id, a_0, Q_0, Q, order = 1,
+  control = PF_control(...), trace = 0, seed = NULL, ...){
   #####
   # checks
   if(order != 1)
@@ -101,154 +133,78 @@ PF_EM <- function(
     id = 1:nrow(data)
   }
 
-  is_for_discrete_model <- model == "logit"
+  #####
+  # check if `control` has all the needed elements or if is called as in
+  # version 0.5.1 or earlier
+  if(!all(c(
+    "N_fw_n_bw", "N_smooth", "N_first", "eps",
+    "forward_backward_ESS_threshold", "method", "n_max", "n_threads",
+    "smoother") %in% names(control))){
+    # TODO: remove this warning some time post release 0.5.1
+    warning("Please, use the ", sQuote("PF_control"), " function for the ",
+            sQuote("control"), " argument.")
+    control <- do.call(PF_control, control)
+
+  }
 
   #####
-  # find design matrix
-  X_Y = get_design_matrix(formula, data)
-  n_params = ncol(X_Y$X)
-
-  if(length(X_Y$fixed_terms) > 0)
-    stop("Fixed terms are not supported")
-
-  #####
-  # find risk set
-  if(trace > 0)
-    message("Finding Risk set")
-  risk_set <-
-    get_risk_obj(
-      Y = X_Y$Y, by = by,
-      max_T = ifelse(missing(max_T), max(X_Y$Y[X_Y$Y[, 3] == 1, 2]), max_T),
-      id = id, is_for_discrete_model = is_for_discrete_model)
-
-  n_fixed <- ncol(X_Y$fixed_terms)
-  if(n_fixed > 0)
-    stop("Fixed effects are not implemented")
-
-  #####
-  # set control variables
-  control_default <- list(
-    eps = 1e-2,
-    forward_backward_ESS_threshold = NULL,
-    method = "AUX_normal_approx_w_particles",
-    n_max = 25,
-    N_fw_n_bw = NULL,
-    N_smooth = NULL,
-    N_first = NULL,
-    n_threads = getOption("ddhazard_max_threads"),
-    seed = .Random.seed,
-    smoother = "Fearnhead_O_N")
-
-  if(any(is.na(control_match <- match(names(control), names(control_default)))))
-    stop("These control parameters are not recognized: ",
-         paste0(names(control)[is.na(control_match)], collapse = "\t"))
-
-  control_default[control_match] <- control
-  control <- control_default
-
-  check_n_particles_expr <- function(N_xyz)
-    eval(bquote({
-      if(is.null(control[[.(N_xyz)]]))
-        stop("Please supply the number of particle for ", sQuote(paste0(
-          "control$", .(N_xyz))))
-    }), parent.frame())
-
-  check_n_particles_expr("N_first")
-  check_n_particles_expr("N_fw_n_bw")
-  check_n_particles_expr("N_smooth")
-
-  #####
-  # find starting values at time zero
-  tmp <- get_start_values(
-    formula = formula, data = data, max_T = max_T,
-    X_Y = X_Y, risk_set = risk_set, verbose = trace > 0,
-    n_threads = control$n_threads, model = model,
-    a_0 = if(missing(a_0)) NULL else a_0,
-    order = order,
-    fixed_parems_start = numeric())
-
-  a_0 <- tmp$a_0
-
-  if(length(a_0) != n_params * order)
-    stop("a_0 does not have the correct length. Its length should be ",
-         n_params * order, " but it has length ", length(a_0))
+  # find risk set and design matrix
+  static_args <- .get_PF_static_args(
+    formula = formula, data = data, by = by,
+    max_T = if(missing(max_T)) NULL else max_T, id = id,
+    trace = trace, model, order = order)
 
   #####
   # find matrices for state equation
-  tmp <- get_state_eq_matrices(
-    order = order, n_params = n_params, n_fixed = n_fixed,
-    est_fixed_in_E = FALSE,
-    Q_0 = if(missing(Q_0)) NULL else Q_0,
-    Q = if(missing(Q)) NULL else Q,
-    a_0)
-  list2env(tmp, environment())
+  start_coefs <- get_start_values(
+    formula = formula, data = data, max_T = max_T, X = static_args$X,
+    fixed_terms = static_args$fixed_terms, risk_set = static_args$risk_obj,
+    verbose = trace > 0, n_threads = control$n_threads, model = model,
+    a_0 = if(missing(a_0)) NULL else a_0, order = order)
+  a_0 <- start_coefs$a_0
+  fixed_parems <- start_coefs$fixed_parems_start
 
-  if(trace > 0)
-    report_pre_liminary_stats_before_EM(
-      risk_set = risk_set, X_Y = X_Y)
+  model_args <- .get_state_eq_matrices_PF(
+    order = order, n_params = nrow(static_args$X),
+    n_fixed = static_args$n_fixed, Q_0 = if(missing(Q_0)) NULL else Q_0,
+    Q = if(missing(Q)) NULL else Q, a_0 = a_0)
 
-  out <- .PF_EM(
-    n_fixed_terms_in_state_vec = 0,
-    X = t(X_Y$X),
-    fixed_terms = t(X_Y$fixed_terms),
-    tstart = X_Y$Y[, 1],
-    tstop = X_Y$Y[, 2],
-    Q_0 = Q_0,
-    Q = Q,
-    a_0 = a_0,
-    .F = .F, L = L, R = R, m = m,
-    risk_obj = risk_set,
-    n_max = control$n_max,
-    n_threads = control$n_threads,
-    N_fw_n_bw = control$N_fw_n_bw,
-    N_smooth = control$N_smooth,
-    N_first = control$N_first,
-    forward_backward_ESS_threshold = control$forward_backward_ESS_threshold,
-    trace = trace,
-    method = control$method,
-    eps = control$eps,
-    seed = control$seed,
-    smoother = control$smoother,
-    model = model)
+  out <- do.call(.PF_EM, c(static_args, model_args, control, list(
+    trace = trace, seed = seed, fixed_parems = fixed_parems)))
 
   out$call <- match.call()
   out
 }
 
+#' @importFrom graphics plot
 .PF_EM <- function(
-  n_fixed_terms_in_state_vec,
-  X,
-  fixed_terms,
-  tstart,
-  tstop,
-  Q_0,
-  Q,
-  a_0,
-  .F, L, R, m,
-  risk_obj,
-  n_max,
-  n_threads,
-  N_fw_n_bw,
-  N_smooth,
-  N_first,
-  eps,
-  forward_backward_ESS_threshold = NULL,
-  trace = 0,
-  method = "AUX_normal_approx_w_particles",
-  seed = NULL,
-  smoother,
-  model){
+  n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, Q_0, Q, a_0, F.,
+  L, R, m, risk_obj, n_max, n_threads, N_fw_n_bw, N_smooth, N_first, eps,
+  forward_backward_ESS_threshold = NULL, debug = 0, trace,
+  method = "AUX_normal_approx_w_particles", seed = NULL, smoother, model,
+  fixed_parems){
   cl <- match.call()
   n_vars <- nrow(X)
   fit_call <- cl
   fit_call[[1]] <- as.name("PF_smooth")
   fit_call[["Q_tilde"]] <- bquote(diag(0, .(n_vars)))
-  fit_call[["F"]] <- fit_call[[".F"]]
-  fit_call[["debug"]] <- max(0, trace - 1)
-  fit_call[c("trace", "eps", "seed", ".F")] <- NULL
+  fit_call[["F"]] <- fit_call[["F."]]
+  fit_call[c("eps", "seed", "F.", "trace")] <- NULL
 
-  if(is.null(seed))
-    seed <- .Random.seed
+  #####
+  # set the seed as in r-source/src/library/stats/R/lm.R `simulate.lm`
+  if(is.null(seed)){
+    if(!exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE))
+      runif(1)                     # initialize the RNG if necessary
+    seed <- get(".Random.seed", envir = .GlobalEnv)
+
+  } else {
+    set.seed(seed)
+    seed <- get(".Random.seed", envir = .GlobalEnv)
+
+  }
+
+  type <- "random_walk"
 
   log_likes <- rep(NA_real_, n_max)
   log_like <- log_like_max <- -Inf
@@ -261,6 +217,11 @@ PF_EM <- function(
       cat("a_0 is:\n")
       print(eval(fit_call$a_0, environment()))
 
+      if(length(fixed_parems) > 0){
+        cat("Fixed parameters are:\n")
+        print(fixed_parems)
+      }
+
       cat("chol(Q) is:\n")
       print(chol(eval(fit_call$Q, environment())))
     }
@@ -269,7 +230,7 @@ PF_EM <- function(
 
     #####
     # find clouds
-    set.seed(seed)
+    assign(".Random.seed", seed, envir = .GlobalEnv)
     clouds <- eval(fit_call, envir = parent.frame())
 
     if(trace > 0){
@@ -283,24 +244,39 @@ PF_EM <- function(
     }
 
     #####
-    # update parameters
+    # update parameters in state equation
+    if(trace > 0)
+      cat("Updating parameters in state model...\n")
     a_0_old <- eval(fit_call$a_0, environment())
     Q_old <- eval(fit_call$Q, environment())
 
-    sum_stats <- compute_summary_stats(clouds, n_threads, a_0 = a_0, Q = Q, Q_0 = Q_0)
-    a_0 <- drop(sum_stats[[1]]$E_xs)
-    Q <- matrix(0., length(a_0), length(a_0))
-    for(j in 1:length(sum_stats))
-      Q <- Q + sum_stats[[j]]$E_x_less_x_less_one_outers
-    Q <- Q / length(sum_stats)
+    if(type == "random_walk"){
+      sum_stats <- compute_summary_stats_first_o_RW(
+        clouds, n_threads, a_0 = a_0, Q = Q, Q_0 = Q_0)
+      a_0 <- drop(sum_stats[[1]]$E_xs)
+      Q <- Reduce("+", lapply(sum_stats, "[[", "E_x_less_x_less_one_outers"))
+      Q <- Q / length(sum_stats)
 
-    fit_call$a_0 <- a_0
-    fit_call$Q <- Q
+      fit_call$a_0 <- a_0
+      fit_call$Q <- Q
+    } else
+      stop(sQuote("type"), " not implemented")
+
+    #####
+    # Update fixed effects
+    if(length(fixed_parems) > 0){
+      if(trace > 0)
+        cat("Updating fixed effects...\n")
+
+      fit_call$fixed_parems <- fixed_parems <- .PF_update_fixed(
+        clouds = clouds$smoothed_clouds, risk_obj = risk_obj, model = model,
+        L = L, X = X, fixed_terms = fixed_terms, fixed_parems = fixed_parems,
+        nthreads = n_threads, tstart = tstart, tstop = tstop)
+    }
 
     #####
     # compute log likelihood and check for convergernce
-    log_like <- logLik(clouds)
-    log_likes[i] <- log_like
+    log_likes[i] <- log_like <- logLik(clouds)
 
     if(trace > 0)
       cat("The log likelihood in iteration ", i, " is ", log_like,
@@ -327,16 +303,146 @@ PF_EM <- function(
     effective_sample_size <- PF_effective_sample_size(clouds)
 
   return(structure(list(
-    call = cl,
-    clouds = clouds,
-    a_0 = a_0,
-    Q = Q,
-    F = fit_call$.F,
-    summary_stats = sum_stats,
-    log_likes = log_likes[1:i],
-    n_iter = i,
-    effective_sample_size = effective_sample_size,
-    seed = seed),
+    call = cl, clouds = clouds, a_0 = a_0, fixed_effects = fixed_parems, Q = Q,
+    F = fit_call$F., L = L, R = R, summary_stats = sum_stats,
+    log_likes = log_likes[1:i], n_iter = i,
+    effective_sample_size = effective_sample_size, seed = seed),
     class = "PF_EM"))
 }
 
+
+#' @title Auxiliary for Controlling Particle Fitting
+#'
+#' @description
+#' Auxiliary for additional settings with \code{\link{PF_EM}}.
+#'
+#' @param N_fw_n_bw number of particles to use in forward and backward filter.
+#' @param N_smooth number of particles to use in particle smoother.
+#' @param N_first number of particles to use at time \eqn{0} and time \eqn{d + 1}.
+#' @param eps convergence threshold in EM method.
+#' @param forward_backward_ESS_threshold required effective sample size to not re-sample in the particle filters.
+#' @param method method for forward, backward and smoothing filter.
+#' @param n_max maximum number of iterations of the EM algorithm.
+#' @param n_threads maximum number threads to use in the computations.
+#' @param smoother smoother to use.
+#'
+#' @return
+#' A list with components named as the arguments.
+#'
+#' @seealso
+#' \code{\link{PF_EM}}
+#'
+#' @export
+PF_control <- function(
+  N_fw_n_bw = NULL, N_smooth = NULL, N_first = NULL,
+  eps = 1e-2, forward_backward_ESS_threshold = NULL,
+  method = "AUX_normal_approx_w_cloud_mean", n_max = 25,
+  n_threads = getOption("ddhazard_max_threads"), smoother = "Fearnhead_O_N"){
+  control <- list(
+    N_fw_n_bw = N_fw_n_bw, N_smooth = N_smooth, N_first = N_first, eps = eps,
+    forward_backward_ESS_threshold = forward_backward_ESS_threshold,
+    method = method, n_max = n_max, n_threads = n_threads, smoother = smoother)
+
+  check_n_particles_expr <- function(N_xyz)
+    eval(bquote({
+      if(is.null(control[[.(N_xyz)]]))
+        stop("Please supply the number of particle in ", sQuote(paste0(
+          "PF_control(", .(N_xyz), ")")))
+    }), parent.frame())
+
+  check_n_particles_expr("N_first")
+  check_n_particles_expr("N_fw_n_bw")
+  check_n_particles_expr("N_smooth")
+
+  return(control)
+}
+
+
+.get_PF_static_args <- function(
+  formula, data, by, max_T = NULL, id, trace, model, order){
+  # get design matrix and risk set
+  tmp <- get_design_matrix_and_risk_obj(
+    formula = formula, data = data, by = by,
+    max_T = if(is.null(max_T)) NULL else max_T, verbose = trace > 0,
+    is_for_discrete_model = model == "logit", id = id)
+
+  if(trace > 0)
+    report_pre_liminary_stats_before_EM(
+      risk_set = tmp$risk_set, Y = tmp$X_Y$Y)
+
+  # tranpose due to column-major storage and we want to look up individuals
+  tmp$X_Y$X           <- t(tmp$X_Y$X)
+  tmp$X_Y$fixed_terms <- t(tmp$X_Y$fixed_terms)
+
+  with(tmp, list(
+    n_fixed_terms_in_state_vec = 0, X = X_Y$X, fixed_terms = X_Y$fixed_terms,
+    tstart = X_Y$Y[, 1], tstop = X_Y$Y[, 2], risk_obj = risk_set,
+    debug = max(0, trace - 1), model = model))
+}
+
+.get_state_eq_matrices_PF <- function(order, n_params, n_fixed, Q_0, Q, a_0){
+  call. <- match.call()
+  call.[["est_fixed_in_E"]] <- FALSE
+  call.[[1]] <- quote(get_state_eq_matrices)
+  out <- eval(call., envir = parent.frame())
+  out$indicies_fix <- NULL
+
+  out
+}
+
+
+.PF_update_fixed <- function(
+  clouds, risk_obj, L, X, fixed_terms, fixed_parems, model, nthreads,
+  tstart, tstop){
+  if(!model %in% c("logit", "exponential"))
+    stop(sQuote(model), " is not implemented with fixed effects")
+
+  family_arg <- switch(
+    model,
+    logit = "binomial",
+    exponential = "poisson")
+
+  out <- NULL
+  for(i in 1:length(clouds)){
+    cl <- clouds[[i]]
+    risk_set <- risk_obj$risk_sets[[i]]
+
+    ran_vars <- X[, risk_set, drop = FALSE]
+    X_i <- fixed_terms[, risk_set, drop = FALSE]
+    y_i <- risk_obj$is_event_in[risk_set] == (i - 1)
+
+    good <- which(drop(cl$weights) >= 1e-7)
+    dts <-
+      pmin(tstop[risk_set], risk_obj$event_times[i + 1]) -
+      pmax(tstart[risk_set], risk_obj$event_times[i])
+
+    ws <- cl$weights[good] # TODO: maybe scale up the weights at this point?
+    particle_coefs <- L %*% cl$states[, good, drop = FALSE]
+
+    out <- c(out, list(
+      pf_fixed_effect_iteration(
+        X = X_i, Y = y_i, dts = dts, cloud = particle_coefs,
+        cl_weights = ws, ran_vars = ran_vars, beta = fixed_parems,
+        family = family_arg, max_threads = nthreads)))
+  }
+
+  f_stack <- do.call(c, lapply(out, "[[", "f"))
+  R_stack <- lapply(out, .get_R)
+  R_stack <- do.call(rbind, R_stack)
+
+  qr. <- qr(R_stack, LAPACK = TRUE)
+  f <- qr.qty(qr., f_stack)[1:nrow(X_i)]
+
+  out <- list(list(
+    R = qr.R(qr.), f = f,
+    pivot = qr.$pivot - 1)) # less one to have zero index as cpp code
+
+  R <- .get_R(out[[1]])
+  drop(solve(t(R) %*% R, t(R) %*% out[[1]]$f))
+}
+
+.get_R <- function(o){
+  piv <- drop(o$pivot) + 1
+  piv[piv] <- 1:length(piv)
+  o$R[, piv, drop = FALSE]
+}

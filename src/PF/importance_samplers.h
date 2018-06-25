@@ -1,11 +1,26 @@
 #ifndef IMPORTANCE_SAMPLERS
 #define IMPORTANCE_SAMPLERS
 
-#include "PF_data.h"
-#include "particles.h"
+#include "PF_utils.h"
 #include "../sample_funcs.h"
 #include "dmvnrm.h"
-#include "PF_utils.h"
+
+
+#define SAMPLE_SMOOTH_ARGS   \
+  densities &dens_calc,      \
+  const PF_data &data,       \
+  cloud &fw_cloud,           \
+  const arma::uvec &fw_idx,  \
+  cloud &bw_cloud,           \
+  const arma::uvec &bw_idx,  \
+  const unsigned int t
+
+#define SAMPLE_COMMON_ARGS        \
+  densities &dens_calc,           \
+  const PF_data &data,            \
+  cloud &cl,                      \
+  const arma::uvec &resample_idx, \
+  const unsigned int t
 
 /*
   Each "importance_sampler" has two static functions:
@@ -26,19 +41,21 @@
 template<typename densities, bool is_forward>
 class importance_dens_base {
 public:
-  static cloud sample_first_state_n_set_weights(const PF_data &data){
+  static cloud sample_first_state_n_set_weights
+  (densities &dens_calc, const PF_data &data){
     cloud ans;
     ans.reserve(data.N_first);
-    arma::mat m1;
     const arma::mat *Q_chol;
-    const arma::vec *mean = &data.a_0;
+    const arma::vec *mean;
 
     if(is_forward){
       Q_chol = &data.Q_0.chol;
+      mean = &data.a_0;
 
     } else {
-      m1 = arma::chol(densities::get_artificial_prior_covar(data, data.d));
-      Q_chol = &m1;
+      Q_chol = &data.uncond_covar_state(data.d + 1).chol;
+      mean = &data.uncond_mean_state(data.d + 1);
+
     }
 
     if(data.debug > 1){
@@ -47,13 +64,13 @@ public:
                   << " with chol(covariance matrix):" << std::endl
                   << *Q_chol
                   << "and mean:" << std::endl
-                  << mean->t();
+                  << *mean;
     }
 
     double log_weight = log(1. / data.N_first);
     for(arma::uword i = 0; i < data.N_first; ++i){
-      arma::vec new_state = mvrnorm(*mean, *Q_chol);
-      ans.new_particle(new_state, nullptr);
+      arma::vec err = mvrnorm(*Q_chol);
+      ans.new_particle(err + *mean, nullptr);
       ans[i].log_weight = log_weight;
     }
 
@@ -65,7 +82,8 @@ public:
  Bootstrap filter
 
  See:
-  Fearnhead, P., Wyncoll, D., & Tawn, J. (2010). A sequential smoothing algorithm with linear computational cost. Biometrika, 97(2), 447-464.
+  Fearnhead, P., Wyncoll, D., & Tawn, J. (2010). A sequential smoothing
+  algorithm with linear computational cost. Biometrika, 97(2), 447-464.
 */
 
 template<typename densities, bool is_forward>
@@ -73,75 +91,63 @@ class importance_dens_no_y_dependence :
   public importance_dens_base<densities, is_forward>{
   static double log_importance_dens_smooth(
       const PF_data &data, const particle &p, int t){
-    arma::vec mean = p.parent->get_state() + p.child->get_state();
+    arma::vec mean =
+      data.err_state_inv->map(
+        data.state_trans->map    (p.parent->get_state()).sv).sv +
+      data.err_state_inv->map(
+        data.state_trans_inv->map(p.child->get_state()).sv).sv;
     mean *= .5;
 
-    return dmvnrm_log(p.get_state(), mean, data.Q_proposal_smooth.chol_inv);
+    return dmvnrm_log(
+      data.err_state_inv->map(p.get_state()).sv,
+      mean,
+      data.Q_proposal_smooth.chol_inv);
   }
 
 public:
-  static cloud sample(
-      const PF_data &data, cloud &cl, const arma::uvec &resample_idx,
-      const unsigned int t, nothing unused){
+  static cloud sample(SAMPLE_COMMON_ARGS, nothing unused){
     cloud ans;
     ans.reserve(data.N_fw_n_bw);
 
     const covarmat *Q_use;
-    arma::vec *a_0_scaled;
-    double bw_w1, bw_w2;
     if(is_forward){
       Q_use = &data.Q_proposal;
 
     } else {
-      bw_w1 = (double)(t + 1) / (t + 2);
-      bw_w2 =              1. / (t + 2);
+      Q_use = &data.bw_covar(t);
 
-      arma::vec &&tmp_vec = bw_w2 * data.a_0;
-      a_0_scaled = new arma::vec(tmp_vec);
-      arma::mat &&tmp = ((double)(t + 1) / (t + 2)) * data.Q.mat;
-      Q_use = new covarmat(tmp);
     }
 
     if(data.debug > 2){
-      data.log(3) << "Sampling new cloud from normal distribution with chol(Q) given by" << std::endl
-                  << data.Q_proposal.chol;
+      data.log(3)
+        << "Sampling new cloud from normal distribution with chol(Q) given by"
+        << std::endl << data.Q_proposal.chol;
+
     }
 
     auto it = resample_idx.begin();
     for(arma::uword i = 0; i < data.N_fw_n_bw; ++i, ++it){
-      const arma::vec *mu;
+      arma::vec mu;
       if(is_forward){
-        mu = &cl[*it].get_state();
+        mu = cl[*it].get_state();
 
       } else {
-        arma::vec &&tmp = bw_w1 * cl[*it].get_state() + *a_0_scaled;
-        mu = new arma::vec(tmp);
+        mu = data.bw_mean(t, cl[*it].get_state());
 
       }
 
-      arma::vec new_state = mvrnorm(*mu, Q_use->chol);
-      ans.new_particle(new_state, &cl[*it]);
+      arma::vec err = mvrnorm(Q_use->chol);
+      ans.new_particle(data.err_state->map(err).sv + mu, &cl[*it]);
 
       particle &p = ans[i];
-      p.log_importance_dens = dmvnrm_log(p.get_state(), *mu, Q_use->chol_inv);
-
-      if(!is_forward)
-        delete mu;
-    }
-
-    if(!is_forward){
-      delete Q_use;
-      delete a_0_scaled;
+      p.log_importance_dens = dmvnrm_log(err, Q_use->chol_inv);
 
     }
 
     return ans;
   }
 
-  static cloud sample_smooth(
-    const PF_data &data,
-    cloud &fw_cloud, const arma::uvec &fw_idx,
-    cloud &bw_cloud, const arma::uvec &bw_idx, const unsigned int t){
+  static cloud sample_smooth(SAMPLE_SMOOTH_ARGS){
     cloud ans;
     ans.reserve(data.N_smooth);
 
@@ -156,15 +162,17 @@ public:
       const particle &fw_p = fw_cloud[*it_fw];
       const particle &bw_p = bw_cloud[*it_bw];
 
-      arma::vec mean = fw_p.get_state() + bw_p.get_state();
-      mean *= .5;
+      arma::vec mu =
+        data.state_trans    ->map(fw_p.get_state()).sv +
+        data.state_trans_inv->map(bw_p.get_state()).sv;
+      mu *= .5;
 
-      arma::vec new_state = mvrnorm(
-        mean, data.Q_proposal_smooth.chol);
-      ans.new_particle(std::move(new_state), &fw_p, &bw_p);
+      arma::vec err = mvrnorm(data.Q_proposal_smooth.chol);
+      ans.new_particle(data.err_state->map(err).sv + mu, &fw_p, &bw_p);
 
       particle &p = ans[i];
       p.log_importance_dens = log_importance_dens_smooth(data, p, t);
+
     }
 
     return ans;
@@ -175,7 +183,8 @@ public:
   Sampler which makes a normal approximation for the observed outcome made
   around the mean of the previous periods particle cloud. See the second
   example on page 462-463 of:
-    Fearnhead, P., Wyncoll, D., & Tawn, J. (2010). A sequential smoothing algorithm with linear computational cost. Biometrika, 97(2), 447-464.
+    Fearnhead, P., Wyncoll, D., & Tawn, J. (2010). A sequential smoothing
+    algorithm with linear computational cost. Biometrika, 97(2), 447-464.
 */
 
 template<typename densities, bool is_forward>
@@ -211,9 +220,7 @@ class importance_dens_normal_approx_w_cloud_mean  :
   }
 
 public:
-  static cloud sample(
-      const PF_data &data, cloud &cl, const arma::uvec &resample_idx,
-      const unsigned int t, nothing unused){
+  static cloud sample(SAMPLE_COMMON_ARGS, nothing unused){
     /* Find weighted mean estimate */
     arma::vec alpha_bar = cl.get_weigthed_mean();
 
@@ -221,14 +228,13 @@ public:
     auto &Q = data.Q_proposal;
     auto inter_output = compute_mu_n_Sigma_from_normal_apprx_w_cloud_mean
       <densities, is_forward>
-      (data, t, Q, alpha_bar, cl);
+      (dens_calc, data, t, Q, alpha_bar, cl);
 
-    return(sample(data, cl, resample_idx, t, inter_output));
+    return(sample(dens_calc, data, cl, resample_idx, t, inter_output));
   }
 
   static cloud sample(
-      const PF_data &data, cloud &cl, const arma::uvec &resample_idx,
-      const unsigned int t,
+      SAMPLE_COMMON_ARGS,
       input_for_normal_apprx_w_cloud_mean &inter_output){
     /* Sample */
     debug_msg_before_sampling(data, inter_output);
@@ -240,11 +246,12 @@ public:
       auto it = resample_idx.begin() + i;
       arma::vec &mu_j = inter_output.mu_js[*it];
 
-      arma::vec new_state = mvrnorm(mu_j, inter_output.Sigma_chol);
-      ans.new_particle(std::move(new_state), &cl[*it]);
+      arma::vec err = mvrnorm(inter_output.Sigma_chol);
+      ans.new_particle(mu_j + data.err_state->map(err).sv, &cl[*it]);
 
       particle &p = ans[i];
-      p.log_importance_dens = dmvnrm_log(p.get_state(), mu_j, inter_output.sigma_chol_inv);
+      p.log_importance_dens =
+        dmvnrm_log(err, inter_output.sigma_chol_inv);
 
       debug_msg_while_sampling(data, p, mu_j);
     }
@@ -252,12 +259,11 @@ public:
     return(ans);
   }
 
-  static cloud sample_smooth(
-      const PF_data &data,
-      cloud &fw_cloud, const arma::uvec &fw_idx,
-      cloud &bw_cloud, const arma::uvec &bw_idx, const unsigned int t){
+  static cloud sample_smooth(SAMPLE_SMOOTH_ARGS){
     /* Find weighted mean estimate */
-    arma::vec alpha_bar = fw_cloud.get_weigthed_mean() + bw_cloud.get_weigthed_mean();
+    arma::vec alpha_bar =
+      data.state_trans    ->map(fw_cloud.get_weigthed_mean()).sv +
+      data.state_trans_inv->map(bw_cloud.get_weigthed_mean()).sv;
     alpha_bar *= .5;
 
     /* compute parts of the terms for the mean and covariance */
@@ -278,17 +284,22 @@ public:
       const particle &fw_p = fw_cloud[*it_fw];
       const particle &bw_p = bw_cloud[*it_bw];
 
-      arma::vec mu_j = fw_p.get_state() + bw_p.get_state();
+      arma::vec mu_j =
+        data.err_state_inv->map(
+          data.state_trans->map    (fw_p.get_state()).sv).sv +
+        data.err_state_inv->map(
+          data.state_trans_inv->map(bw_p.get_state()).sv).sv;
       mu_j *= .5;
       mu_j = solve_w_precomputed_chol(Q.chol, mu_j) + inter_output.mu;
       mu_j = solve_w_precomputed_chol(inter_output.Sigma_inv_chol, mu_j);
 
-      arma::vec new_state;
-      new_state = mvrnorm(mu_j, inter_output.Sigma_chol);
-      ans.new_particle(std::move(new_state), &fw_p, &bw_p);
+      // TODO: has issues with degenrate distribution (e.g., AR(2) model)
+      arma::vec err = mvrnorm(inter_output.Sigma_chol);
+      ans.new_particle(data.err_state->map(err).sv + mu_j, &fw_p, &bw_p);
 
       particle &p = ans[i];
-      p.log_importance_dens = dmvnrm_log(p.get_state(), mu_j, inter_output.sigma_chol_inv);
+      p.log_importance_dens =
+        dmvnrm_log(err, inter_output.sigma_chol_inv);
 
       debug_msg_while_sampling(data, p, mu_j);
     }
@@ -327,23 +338,19 @@ class importance_dens_normal_approx_w_particles  :
   }
 
 public:
-  static cloud sample(
-      const PF_data &data, cloud &cl, const arma::uvec &resample_idx,
-      const unsigned int t, nothing unused){
-
+  static cloud sample(SAMPLE_COMMON_ARGS, nothing unused) {
     /* compute means and covariances */
     auto &Q = data.Q_proposal;
     auto inter_output =
       compute_mu_n_Sigma_from_normal_apprx_w_particles
       <densities, is_forward>
-      (data, t, Q, cl);
+      (dens_calc, data, t, Q, cl);
 
-    return(sample(data, cl, resample_idx, t, inter_output));
+    return(sample(dens_calc, data, cl, resample_idx, t, inter_output));
   }
 
   static cloud sample(
-      const PF_data &data, cloud &cl, const arma::uvec &resample_idx,
-      const unsigned int t,
+      SAMPLE_COMMON_ARGS,
       input_for_normal_apprx_w_particle_mean &inter_output){
     /* Sample */
     cloud ans;
@@ -353,12 +360,12 @@ public:
       auto it = resample_idx.begin() + i;
       auto &inter_o = inter_output[*it];
 
-      arma::vec new_state;
-      new_state = mvrnorm(inter_o.mu, inter_o.Sigma_chol);
-      ans.new_particle(std::move(new_state), &cl[*it]);
+      // TODO: has issues with degenrate distribution (e.g., AR(2) model)
+      arma::vec err = mvrnorm(inter_o.Sigma_chol);
+      ans.new_particle(data.err_state->map(err).sv + inter_o.mu, &cl[*it]);
 
       particle &p = ans[i];
-      p.log_importance_dens = dmvnrm_log(p.get_state(), inter_o.mu, inter_o.sigma_chol_inv);
+      p.log_importance_dens = dmvnrm_log(err, inter_o.sigma_chol_inv);
 
       debug_msg_while_sampling(data, p, inter_o.mu, inter_o.Sigma_chol);
     }
@@ -366,10 +373,7 @@ public:
     return(ans);
   }
 
-  static cloud sample_smooth(
-      const PF_data &data,
-      cloud &fw_cloud, const arma::uvec &fw_idx,
-      cloud &bw_cloud, const arma::uvec &bw_idx, const unsigned int t){
+  static cloud sample_smooth(SAMPLE_SMOOTH_ARGS){
     /* Compute means before accounting for outcomes */
     std::vector<arma::vec> mus(data.N_smooth);
 
@@ -384,7 +388,9 @@ public:
       const particle &fw_p = fw_cloud[*(begin_fw + i)];
       const particle &bw_p = bw_cloud[*(begin_bw + i)];
 
-      mu_j = fw_p.get_state() + bw_p.get_state();
+      mu_j =
+        data.state_trans    ->map(fw_p.get_state()).sv +
+        data.state_trans_inv->map(bw_p.get_state()).sv;
       mu_j *= .5;
     }
 
@@ -393,7 +399,7 @@ public:
     auto inter_output =
       compute_mu_n_Sigma_from_normal_apprx_w_particles
       <densities, is_forward>
-      (data, t, Q, mus);
+      (dens_calc, data, t, Q, mus);
 
     /* Sample */
     cloud ans;
@@ -406,11 +412,13 @@ public:
       const particle &fw_p = fw_cloud[*it_fw];
       const particle &bw_p = bw_cloud[*it_bw];
 
-      arma::vec new_state = mvrnorm(it_inter->mu, it_inter->Sigma_chol);
-      ans.new_particle(std::move(new_state), &fw_p, &bw_p);
+      arma::vec err = mvrnorm(it_inter->Sigma_chol);
+      ans.new_particle(
+        data.err_state->map(err).sv + it_inter->mu, &fw_p, &bw_p);
 
       particle &p = ans[i];
-      p.log_importance_dens = dmvnrm_log(p.get_state(), it_inter->mu, it_inter->sigma_chol_inv);
+      p.log_importance_dens =
+        dmvnrm_log(err, it_inter->sigma_chol_inv);
 
       debug_msg_while_sampling(data, p, it_inter->mu, it_inter->Sigma_chol);
     }
@@ -419,5 +427,6 @@ public:
   }
 };
 
-
+#undef SAMPLE_SMOOTH_ARGS
+#undef SAMPLE_COMMON_ARGS
 #endif

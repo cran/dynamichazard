@@ -1,5 +1,15 @@
 #include "../arma_BLAS_LAPACK.h"
 #include "../R_BLAS_LAPACK.h"
+#include <sstream>
+
+#define MIN(a,b) (((a)<(b))?(a):(b))
+
+# define LAPACK_CHECK_ILLEGAL(info_sym, meth_name)                                           \
+if(info_sym < 0){                                                                            \
+  std::stringstream ss;                                                                      \
+  ss << "The " << -info_sym << "-th argument to " << #meth_name  << " had an illegal value"; \
+  Rcpp::stop(ss.str());                                                                      \
+}
 
 void chol_rank_one_update(arma::mat &R, arma::vec x){
   // WARNING:
@@ -99,6 +109,161 @@ arma::vec solve_w_precomputed_chol(const arma::mat &chol_decomp, const arma::vec
     chol_decomp.memptr(), out.memptr(), true, true  /* transpose */, n, 1);
   R_BLAS_LAPACK::triangular_sys_solve(
     chol_decomp.memptr(), out.memptr(), true, false /* don't transpose */, n, 1);
+
+  return out;
+}
+
+
+LU_factorization::LU_factorization(const arma::mat& A):
+  M(A.n_rows), N(A.n_cols), has_elem(M > 0 && N > 0),
+  A(new double[M * N]), IPIV(new int[MIN(M, N)]){
+  if(!has_elem)
+    return;
+
+  // copy A
+  const double *a = A.memptr();
+  for(int i = 0; i < M * N; ++i, ++a)
+    this->A[i] = *a;
+
+  int LDA = M, INFO;
+  R_BLAS_LAPACK::dgetrf(&M, &N, &this->A[0], &LDA, &IPIV[0], &INFO);
+
+  LAPACK_CHECK_ILLEGAL(INFO, dgetrf)
+  if(INFO > 0){
+    std::stringstream ss;
+    ss << "U(" << INFO << ", " << INFO << ") is exactly zero in dgetrf";
+    Rcpp::stop(ss.str());
+  }
+}
+
+arma::mat LU_factorization::solve() const {
+  if(!has_elem)
+    return arma::mat();
+
+  if(M != N)
+    Rcpp::stop("Non-square matrix in `LU_factorization::solve()`");
+
+  // take copy
+  arma::mat out(&A[0], N, N);
+
+  int LWORK = N * N, INFO, LDA = N;
+  std::unique_ptr<double []>  dwo(new double[LWORK]);
+
+  // see https://stackoverflow.com/a/3520106/5861244 for example
+  R_BLAS_LAPACK::dgetri(
+    &N, &out[0], &LDA, &IPIV[0], &dwo[0], &LWORK, &INFO);
+  LAPACK_CHECK_ILLEGAL(INFO, dgetri)
+
+  return out;
+}
+
+arma::mat LU_factorization::solve(
+    const arma::mat &B, const bool transpose) const {
+  if(!has_elem && B.n_elem == 0)
+    return arma::mat();
+
+  // take copy
+  arma::mat out = B;
+
+  int NRHS = B.n_cols, LDA = N, LDB = B.n_rows, INFO;
+
+  R_BLAS_LAPACK::dgetrs(
+    transpose ? "T" : "N", &N, &NRHS, &A[0], &LDA, &IPIV[0], out.memptr(),
+    &LDB, &INFO);
+  LAPACK_CHECK_ILLEGAL(INFO, dgetrs)
+
+  return out;
+}
+
+arma::vec LU_factorization::solve(
+    const arma::vec& B, const bool transpose) const {
+  if(!has_elem && B.n_elem == 0)
+    return arma::vec();
+
+  // take copy
+  arma::vec out = B;
+
+  int NRHS = 1, LDA = N, LDB = B.n_elem, INFO;
+
+  R_BLAS_LAPACK::dgetrs(
+    transpose ? "T" : "N", &N, &NRHS, &A[0], &LDA, &IPIV[0], out.memptr(),
+    &LDB, &INFO);
+  LAPACK_CHECK_ILLEGAL(INFO, dgetrs)
+
+  return out;
+}
+
+
+
+QR_factorization::QR_factorization(const arma::mat &A):
+  M(A.n_rows), N(A.n_cols), qr(new double[M * N]),
+  qraux(new double[MIN(M, N)]), pivot_(new int[N]){
+  // copy A
+  const double *a = A.memptr();
+  for(int i = 0; i < M * N; ++i, ++a)
+    qr[i] = *a;
+
+  /* initalize */
+  for(int i = 0; i < N; ++i)
+    pivot_[i] = 0;
+
+  /* compute QR */
+  int info, lwork = -1;
+  double tmp;
+  R_BLAS_LAPACK::dgeqp3(
+    &M, &N, &qr[0], &M, &pivot_[0], &qraux[0], &tmp, &lwork, &info);
+  LAPACK_CHECK_ILLEGAL(info, dgeqp3)
+
+  lwork = (int) tmp;
+  std::unique_ptr<double []> dwo(new double[lwork]);
+  R_BLAS_LAPACK::dgeqp3(
+    &M, &N, &qr[0], &M, &pivot_[0], &qraux[0], &dwo[0], &lwork, &info);
+  LAPACK_CHECK_ILLEGAL(info, dgeqp3)
+
+  rank = MIN(M, N);
+}
+
+arma::mat QR_factorization::qy(
+    const arma::mat &B, const bool transpose) const {
+  // take copy
+  arma::mat out = B;
+  int NRHS = B.n_cols, K = MIN(M, N);
+
+  /* compute QR */
+  int info, lwork = -1;
+  double tmp;
+  R_BLAS_LAPACK::dormqr(
+    "L", transpose ? "T" : "N", &M, &NRHS, &K, &qr[0], &M, &qraux[0],
+    out.memptr(), &M, &tmp, &lwork, &info);
+  LAPACK_CHECK_ILLEGAL(info, dormqr)
+
+  lwork = (int) tmp;
+  std::unique_ptr<double []> work(new double[lwork]);
+  R_BLAS_LAPACK::dormqr(
+    "L", transpose ? "T" : "N", &M, &NRHS, &K, &qr[0], &M, &qraux[0],
+    out.memptr(), &M, &work[0], &lwork, &info);
+  LAPACK_CHECK_ILLEGAL(info, dormqr)
+
+  return out;
+}
+
+arma::vec QR_factorization::qy(
+    const arma::vec &B, const bool transpose) const {
+  arma::mat out = B;
+  return qy(out, transpose);
+}
+
+arma::mat QR_factorization::R() const {
+  arma::mat out(&qr[0], M, N);
+  out = out.rows(0, MIN(M, N) - 1);
+
+  return arma::trimatu(out);
+}
+
+arma::uvec QR_factorization::pivot() const {
+  arma::uvec out(N);
+  for(int i = 0; i < N; ++i)
+    out[i] = pivot_[i] - 1; /* want zero index */
 
   return out;
 }

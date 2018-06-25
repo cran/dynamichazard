@@ -41,7 +41,7 @@ current_version # the string you need to pass to devtools::install_github
 
 ## ---- echo=FALSE---------------------------------------------------------
 library(survival)
-source("../R/test_utils.R")
+source("../R/sims.R")
 
 start_fun <- function(t_0 = t_0, t_max = t_max) max(0, runif(1, t_0 - t_max, t_max - 1 - 1e-8))
 

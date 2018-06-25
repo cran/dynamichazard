@@ -6,6 +6,29 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
+#define BINOMIAL "binomial"
+#define POISSON "poisson"
+
+class glm_base {
+public:
+  virtual double glm_dev_resids(double, double, double) const = 0;
+
+  virtual double glm_linkfun(double) const = 0;
+
+  virtual double glm_linkinv(double) const = 0;
+
+  virtual double glm_variance(double) const = 0;
+
+  virtual double glm_mu_eta(double) const = 0;
+
+  virtual double glm_initialize(double, double) const = 0;
+
+  virtual std::string name() const = 0;
+
+  // create a virtual, default destructor
+  virtual ~glm_base() = default;
+};
+
 template<class T>
 class family_base {
 public:
@@ -44,9 +67,12 @@ public:
     return T::dd_log_like(
       outcome, res.eta_trunc, res.exp_eta_trunc, at_risk_length);
   }
+
+  // create a virtual, default destructor
+  virtual ~family_base() = default;
 };
 
-class logistic : public family_base<logistic> {
+class logistic : public family_base<logistic>, public glm_base {
 public:
   const static bool uses_at_risk_length = false;
 
@@ -100,10 +126,42 @@ public:
       const double exp_eta, const double at_risk_length){
     return - mu_eta(eta, exp_eta, at_risk_length);
   }
+
+  /* GLM family like functions */
+  double glm_dev_resids(double y, double mu, double wt) const override {
+    return - 2 * wt * (y * log(mu) + (1 - y) * log(1 - mu));
+  }
+
+  double glm_linkfun(double mu) const override {
+    return log(mu / (1 - mu));
+  }
+
+  double glm_linkinv(double eta) const override {
+    return 1 / (1 + exp(-eta));
+  }
+
+  double glm_variance(double mu) const override {
+    return mu * (1 - mu);
+  }
+
+  double glm_mu_eta(double eta) const override {
+    double exp_eta = exp(-eta);
+    return (eta < -30 || eta > 30) ?
+    std::numeric_limits<double>::epsilon() :
+      exp_eta /((1 + exp_eta) * (1 + exp_eta));
+  }
+
+  double glm_initialize(double y, double weight) const override {
+    return glm_linkfun((weight * y + 0.5)/(weight + 1));
+  }
+
+  std::string name() const override {
+    return BINOMIAL;
+  }
 };
 
 
-class exponential : public family_base<exponential> {
+class exponential : public family_base<exponential>, public glm_base {
 public:
   const static bool uses_at_risk_length = true;
 
@@ -150,6 +208,38 @@ public:
       const bool outcome, const double eta,
       const double exp_eta, const double at_risk_length){
     return - exp_eta * at_risk_length;
+  }
+
+  /* GLM family like functions. Notice Poisson distribution */
+  double glm_dev_resids(double y, double mu, double wt) const override {
+    if(y > 0)
+      return 2 * (wt * (y * log(y/mu) - (y - mu)));
+
+    return 2 * mu * wt;
+  }
+
+  double glm_linkfun(double mu) const override {
+    return log(mu);
+  }
+
+  double glm_linkinv(double eta) const override {
+    return std::max(exp(eta), std::numeric_limits<double>::epsilon());
+  }
+
+  double glm_variance(double mu) const override {
+    return mu;
+  }
+
+  double glm_mu_eta(double eta) const override {
+    return std::max(exp(eta), std::numeric_limits<double>::epsilon());
+  }
+
+  double glm_initialize(double y, double weight) const override {
+    return glm_linkfun(y + 0.1);
+  }
+
+  std::string name() const override {
+    return POISSON;
   }
 };
 

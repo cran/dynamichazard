@@ -16,13 +16,16 @@ inline bool is_exponential_model(std::string model){
 class Solver {
 public:
   virtual void solve() = 0;
+
+  // create a virtual, default destructor
+  virtual ~Solver() = default;
 };
 
 // Classes for EKF method
 class ddhazard_data_EKF;
 
 template<typename T>
-class EKF_solver : public Solver{
+class EKF_solver : public Solver {
   ddhazard_data &org;
   std::unique_ptr<ddhazard_data_EKF> p_dat;
   const std::string model;
@@ -65,8 +68,8 @@ class UKF_solver_Org : public Solver{
     s_points.col(0) = a_t;
     for(arma::uword i = 1; i < s_points.n_cols; ++i)
       if(i % 2 == 0)
-        s_points.col(i) = a_t + sqrt_m_k * cholesky_decomp.unsafe_col((i - 1) / 2); else
-          s_points.col(i) = a_t - sqrt_m_k * cholesky_decomp.unsafe_col((i - 1) / 2);
+        s_points.col(i) = a_t + sqrt_m_k * cholesky_decomp.col((i - 1) / 2); else
+          s_points.col(i) = a_t - sqrt_m_k * cholesky_decomp.col((i - 1) / 2);
   }
 
 public:
@@ -80,7 +83,7 @@ public:
 
 
 template<class T>
-class UKF_solver_New : public Solver{
+class UKF_solver_New : public Solver {
 protected:
   ddhazard_data &p_dat;
   const arma::uword m;
@@ -145,7 +148,7 @@ class GMA : public Solver
   bool have_failed_once = false;
 
 public:
-  GMA(ddhazard_data &p, signed int max_rep, double NR_eps):
+  GMA(ddhazard_data &p, unsigned int max_rep, double NR_eps):
   p_dat(p), max_rep((unsigned int)max_rep), NR_eps(NR_eps)
   { };
 

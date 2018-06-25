@@ -233,4 +233,36 @@ namespace R_BLAS_LAPACK {
       const double *dy, const int *incy){
     return F77_NAME(ddot)(n, dx, incx, dy, incy);
   }
+
+  void dgetrf(
+      const int* m, const int* n, double* a, const int* lda,int* ipiv,
+      int* info){
+    F77_NAME(dgetrf)(m, n, a, lda, ipiv, info);
+  }
+
+  void dgetrs(
+      const char* trans, const int* n, const int* nrhs, const double* a,
+      const int* lda, const int* ipiv, double* b, const int* ldb, int* info){
+    F77_NAME(dgetrs)(trans, n, nrhs, a, lda, ipiv, b, ldb, info);
+  }
+
+  void dormqr(const char* side, const char* trans,
+              const int* m, const int* n, const int* k,
+              const double* a, const int* lda,
+              const double* tau, double* c, const int* ldc,
+              double* work, const int* lwork, int* info){
+    F77_NAME(dormqr)(
+        side, trans, m, n, k, a, lda, tau, c, ldc, work, lwork, info);
+  }
+
+  void dgeqp3(const int* m, const int* n, double* a, const int* lda,
+              int* jpvt, double* tau, double* work, const int* lwork,
+              int* info){
+    F77_NAME(dgeqp3)(m, n, a, lda, jpvt, tau, work, lwork, info);
+  }
+
+  void dgetri(const int* n, double* a, const int* lda,
+              int* ipiv, double* work, const int* lwork, int* info){
+    F77_NAME(dgetri)(n, a, lda, ipiv, work, lwork, info);
+  }
 }

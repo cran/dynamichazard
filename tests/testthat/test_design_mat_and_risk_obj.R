@@ -511,7 +511,7 @@ test_that("is_for_discrete_model logic work",{
 })
 
 #####
-# By hand test of risk_obj
+# "By hand" test of risk_obj
 
 # This is a useful illustration (I find)
 plot_exp <- expression({
@@ -599,7 +599,7 @@ test_that("Individuals are markeds as events in the correct bins", {
 })
 
 #####
-# Test randomize
+# Test randomize order
 
 set.seed(875080)
 X_Y <- get_design_matrix(
@@ -613,15 +613,15 @@ w_org <- w <- sample(1:3, replace = T, nrow(pbc2))
 eval(get_permu_data_exp(X_Y[1:3], risk_obj, w))
 
 
-got_plyr <- suppressWarnings(require(plyr, quietly = T))
 test_that("Permutating gives the data frame and risk set permutated", {
+  got_plyr <- requireNamespace("plyr", quietly = TRUE)
+
   for(i in 1:2){
     expect_true(any(as.matrix(X_Y[[i]]) != as.matrix(X_Y_org[[i]])))
     expect_equal(nrow(X_Y[[i]]), nrow(X_Y_org[[i]]))
-    if(got_plyr){
-      expect_equal(nrow(suppressMessages(match_df(X_Y_org[[i]], X_Y[[i]]))),
+    if(got_plyr)
+      expect_equal(nrow(suppressMessages(plyr::match_df(X_Y_org[[i]], X_Y[[i]]))),
         nrow(X_Y_org[[i]]))
-    }
   }
   expect_true(sum(is.na(match(X_Y_org$Y, X_Y$Y))) == 0)
 
@@ -674,11 +674,13 @@ w_org <- w <- sample(1:3, replace = T, nrow(pbc2))
 eval(get_order_data_exp(X_Y[1:3], risk_obj, w))
 
 test_that("Ordering gives the data frame and risk set orded", {
+  got_plyr <- requireNamespace("plyr", quietly = TRUE)
+
   for(i in 1:2){
     expect_true(any(as.matrix(X_Y[[i]]) != as.matrix(X_Y_org[[i]])))
     expect_equal(nrow(X_Y[[i]]), nrow(X_Y_org[[i]]))
     if(got_plyr){
-      expect_equal(nrow(suppressMessages(match_df(X_Y_org[[i]], X_Y[[i]]))),
+      expect_equal(nrow(suppressMessages(plyr::match_df(X_Y_org[[i]], X_Y[[i]]))),
                    nrow(X_Y_org[[i]]))
     }
   }
