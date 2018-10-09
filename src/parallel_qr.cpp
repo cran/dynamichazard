@@ -38,7 +38,7 @@ R_F qr_parallel::compute(){
   /* gather results */
   bool is_first = true;
   arma::mat R_stack;
-  arma::vec F_stack;
+  arma::mat F_stack;
   arma::mat dev;
 
   unsigned int num_blocks = futures.size();
@@ -56,6 +56,7 @@ R_F qr_parallel::compute(){
     F_stack = arma::join_cols(F_stack, std::move(R_Fs_i.F));
     dev += R_Fs_i.dev;
   }
+  futures.clear(); /* in case the method is called again */
 
   /* make new QR decomp and compute new F */
   QR_factorization qr(R_stack);

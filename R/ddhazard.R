@@ -4,7 +4,7 @@ if(getRversion() >= "2.15.1")
 #' @title Fitting Dynamic Hazard Models
 #' @description  Function to fit dynamic hazard models using state space models.
 #' @param formula \code{\link[survival]{coxph}} like formula with \code{\link[survival]{Surv}(tstart, tstop, event)} on the left hand site of \code{~}.
-#' @param data \code{data.frame} or environment containing the outcome and co-variates.
+#' @param data \code{data.frame} or environment containing the outcome and covariates.
 #' @param model \code{"logit"} or \code{"exponential"} for the logistic link function in the first case or for the continuous time model in the latter case.
 #' @param by interval length of the bins in which parameters are fixed.
 #' @param max_T end of the last interval interval.
@@ -14,7 +14,8 @@ if(getRversion() >= "2.15.1")
 #' @param Q initial covariance matrix for the state equation.
 #' @param order order of the random walk.
 #' @param weights weights to use if e.g. a skewed sample is used.
-#' @param control list of control variables (see the control section below).
+#' @param control list of control variables from
+#' \code{\link{ddhazard_control}}.
 #' @param verbose \code{TRUE} if you want status messages during execution.
 #'
 #' @details
@@ -22,35 +23,9 @@ if(getRversion() >= "2.15.1")
 #'
 #' All filter methods needs a state covariance matrix \code{Q_0} and state vector \code{a_0}. An estimate from a time-invariant model is used for \code{a_0} if it is not supplied (the same model you would get from \code{\link{static_glm}}). A diagonal matrix with large entries is recommended for \code{Q_0}. What is large dependents on the data set and \code{model}. Further, a covariance matrix for the first iteration \code{Q} is needed. The \code{Q} and \code{a_0} are estimated with an EM-algorithm.
 #'
-#' The model is specified through the \code{model} argument. The logistic model is where outcomes are binned into the intervals. Be aware that there can be "loss" of information due to binning. It is key for the logit model that the \code{id} argument is provided if individuals in the data set have time-varying co-variates. The the exponential model use an exponential model for the arrival times where there is no "loss" information due to binning.
+#' The model is specified through the \code{model} argument. The logistic model is where outcomes are binned into the intervals. Be aware that there can be "loss" of information due to binning. It is key for the logit model that the \code{id} argument is provided if individuals in the data set have time-varying covariates. The the exponential model use an exponential model for the arrival times where there is no "loss" information due to binning.
 #'
 #' It is recommended to see the Shiny app demo for this function by calling \code{\link{ddhazard_app}()}.
-#'
-#' @section Control:
-#' The \code{control} argument allows you to pass a \code{list} to select additional parameters. See \code{vignette("ddhazard", "dynamichazard")} for more information. Unspecified elements of the list will yield default values.
-#' \describe{
-#' \item{\code{method}}{set to the method to use in the E-step. Either \code{"EKF"} for the Extended Kalman Filter, \code{"UKF"} for the Unscented Kalman Filter, \code{"SMA"} for the sequential posterior mode approximation method or \code{"GMA"} for the global mode approximation method. \code{"EKF"} is the default.}
-#' \item{\code{LR}}{learning rate.}
-#' \item{\code{NR_eps}}{tolerance for the Extended Kalman filter. Default is \code{NULL} which means that no extra iteration is made in the correction step.}
-#' \item{\code{alpha}}{hyper parameter \eqn{\alpha} in the unscented Kalman Filter.}
-#' \item{\code{beta}}{hyper parameter \eqn{\beta} in the unscented Kalman Filter.}
-#' \item{\code{kappa}}{hyper parameter \eqn{\kappa} in the unscented Kalman Filter.}
-#' \item{\code{n_max}}{maximum number of iteration in the EM-algorithm.}
-#' \item{\code{eps}}{tolerance parameter for the EM-algorithm.}
-#' \item{\code{est_Q_0}}{\code{TRUE} if you want the EM-algorithm to estimate \code{Q_0}. Default is \code{FALSE}.}
-#' \item{\code{save_risk_set}}{\code{TRUE} if you want to save the list from \code{\link{get_risk_obj}} used to estimate the model. It may be needed for later calls to e.g., \code{residuals}, \code{plot} and \code{logLike}.}
-#' \item{\code{save_data}}{\code{TRUE} if you want to keep the \code{data} argument. It may be needed for later calls to e.g., \code{residuals}, \code{plot} and \code{logLike}.}
-#' \item{\code{denom_term}}{term added to denominators in either the EKF or UKF.}
-#' \item{\code{n_threads}}{maximum number of threads to use.}
-#' \item{\code{fixed_parems_start}}{starting value for fixed terms.}
-#' \item{\code{fixed_terms_method}}{the method used to estimate the fixed effects. Either \code{'M_step'} or \code{'E_step'} for estimation in the M-step or E-step respectively.}
-#' \item{\code{Q_0_term_for_fixed_E_step}}{the diagonal value of the initial covariance matrix, \code{Q_0}, for the fixed effects if fixed effects are estimated in the E-step.}
-#' \item{\code{eps_fixed_parems}}{tolerance used in the M-step of the Fisher's scoring algorithm for the fixed effects.}
-#' \item{\code{permu}}{\code{TRUE} if the risk sets should be permutated before computation. This is \code{TRUE} by default for posterior mode approximation method and \code{FALSE} for all other methods.}
-#' \item{\code{posterior_version}}{the implementation version of the posterior approximation method. Either \code{"woodbury"} or \code{"cholesky"}.}
-#' \item{\code{GMA_max_rep}}{maximum number of iterations in the correction step if \code{method = 'GMA'}.}
-#' \item{\code{GMA_NR_eps}}{tolerance for the convergence criteria for the relative change in the norm of the coefficients in the correction step if \code{method = 'GMA'}.}
-#'}
 #'
 #' @return
 #' A list with class \code{ddhazard}. The list contains
@@ -89,25 +64,21 @@ if(getRversion() >= "2.15.1")
 #'fit <- ddhazard(
 #'  Surv(time, status == 2) ~ log(bili), pbc, id = pbc$id, max_T = 3600,
 #'  Q_0 = diag(1, 2), Q = diag(1e-4, 2), by = 50,
-#'  control = list(method = "GMA"))
+#'  control = ddhazard_control(method = "GMA"))
 #'plot(fit)
 #'
 #'# example with second order model
 #'fit <- ddhazard(
 #'  Surv(time, status == 2) ~ log(bili), pbc, id = pbc$id, max_T = 3600,
 #'  Q_0 = diag(1, 4), Q = diag(1e-4, 2), by = 50,
-#'  control = list(method = "GMA"),
+#'  control = ddhazard_control(method = "GMA"),
 #'  order = 2)
 #'plot(fit)
 #'
 #' @export
-ddhazard = function(formula, data,
-                    model = "logit",
-                    by, max_T, id,
-                    a_0, Q_0, Q = Q_0,
-                    order = 1, weights,
-                    control = list(),
-                    verbose = F){
+ddhazard = function(
+  formula, data, model = "logit", by, max_T, id, a_0, Q_0, Q = Q_0, order = 1,
+  weights, control = ddhazard_control(), verbose = F){
   #####
   # checks
   if (model %in% c("exp_bin", "exp_clip_time", "exp_clip_time_w_jump")){
@@ -167,69 +138,45 @@ ddhazard = function(formula, data,
 
   #####
   # set control arguments
-  control_default <- list(
-    kappa = NULL, alpha = 1, beta = 0,
-    NR_eps = NULL, LR = 1, n_max = 10^2, eps = 1e-3,
-    est_Q_0 = F, method = "EKF", save_risk_set = T,
-    save_data = T, eps_fixed_parems = 1e-4,
-    max_it_fixed_params = 25, fixed_effect_chunk_size = 1e4,
-    debug = F, fixed_parems_start = NULL, LR_max_try = 10,
-    LR_decrease_fac = 0.9,
-    n_threads = getOption("ddhazard_max_threads"),
-    denom_term = 1e-5,
-    fixed_terms_method = "E_step",
-    Q_0_term_for_fixed_E_step = NULL,
-    use_pinv = FALSE, criteria = "delta_coef",
-    permu = if(!is.null(control$method)) control$method == "SMA" else F,
-    posterior_version = "cholesky",
-    GMA_max_rep = 25,
-    GMA_NR_eps = 1e-4,
-    EKF_batch_size = 500L)
+  ctrl <- substitute(control)
+  if(is.call(ctrl) && identical(ctrl[[1]], quote(list))){
+    # TODO: remove this warning sometime post version 0.6.0
+    warning(sQuote("ddhazard_control"), " instead of ", sQuote("list"),
+            " to the ", sQuote("control"), " argument")
+    ctrl[[1L]] <- quote(ddhazard_control)
+    control <- eval(ctrl)
 
-  if(any(is.na(control_match <-
-               match(names(control), names(control_default)))))
-    stop("These control parameters are not recognized: ",
-         paste0(names(control)[is.na(control_match)], collapse = "\t"))
+  } else if(is.list(control)){
+    if(any(!names(control) %in% c(
+      names(formals(ddhazard_control)), names(ddhazard_control_xtra_get()))))
+      stop(sQuote("control"), " contains unused elements")
 
-  control_default[control_match] <- control
-  control <- control_default
+    # does control have all the needed elements?
+    if(!setequal(names(control), names(formals(ddhazard_control)))){
+      cl <- as.call(c(list(quote(ddhazard_control)), control))
+      control <- eval(cl)
 
-  if(!control$criteria %in% c("delta_coef", "delta_likeli"))
-    stop("Convergence criteria ", control$criteria, " not implemented")
+    }
 
-  if(is.null(control$Q_0_term_for_fixed_E_step))
-    control$Q_0_term_for_fixed_E_step <- ifelse(
-      # quite abritary values (especially the former - the latter is not too
-      # important).
-      control$method %in% c("UKF", "GMA"), 1, 1e5)
-
-  if(!control$fixed_terms_method %in% c("M_step", "E_step"))
-    stop("fixed_terms_method method ", sQuote(control$fixed_terms_method),
-         " is not implemented")
-
-  if(control$denom_term <= 0){
-    stop("Method not implemented with penalty term ",
-         sQuote("control$denom_term"), " equal to ", control$denom_term)
-
-  }
+  } else
+    stop("Invalid ", sQuote("control"), " argument")
 
   est_fixed_in_E <- control$fixed_terms_method == "E_step" && n_fixed > 0
 
   #####
   # Find starting values at time zero
   tmp <- get_start_values(
-    formula = formula, data = data, max_T = max_T,
+    data = data, formula = formula, max_T = max_T,
     # TODO: avoid transpose here by transpoing earlier
     X = t(X_Y$X), fixed_terms = t(X_Y$fixed_terms),
-
     risk_set = risk_set,
     verbose = verbose, n_threads = control$n_threads, model = model,
     a_0 = if(missing(a_0)) NULL else a_0,
-    order = order,
+    order = order, type = "RW",
     fixed_parems_start = control$fixed_parems_start)
 
   a_0 <- tmp$a_0
-  control$fixed_parems_start <- tmp$fixed_parems_start
+  control$fixed_parems_start <- fixed_parems_start <- tmp$fixed_parems_start
 
   #####
   # Find matrices for state equation
@@ -240,6 +187,12 @@ ddhazard = function(formula, data,
     Q = if(missing(Q)) NULL else Q,
     a_0 = a_0, control)
   list2env(tmp, environment())
+
+  .check_filter_input(
+    Q = Q, Q_0 = Q_0, F. = F., R = R, a_0 = a_0, L = L,
+    fixed_parems = fixed_parems_start, est_fixed_in_E = est_fixed_in_E,
+    X = X_Y$X, fixed_terms = X_Y$fixed_terms, order = order,
+    has_transposed_design = FALSE)
 
   if(verbose)
     report_pre_liminary_stats_before_EM(risk_set = risk_set, Y = X_Y$Y)
@@ -270,7 +223,7 @@ ddhazard = function(formula, data,
     tryCatch({
       result <- ddhazard_no_validation(
         a_0 = a_0, Q_0 = Q_0, F. = F., verbose = verbose, Q = Q,
-        risk_set= risk_set, X_Y = X_Y, model = model, R = R, L = L, m = m,
+        risk_set= risk_set, X_Y = X_Y, model = model, R = R, L = L,
         LR = control$LR * control$LR_decrease_fac^(k),
         n_fixed_terms_in_state_vec = ifelse(est_fixed_in_E, n_fixed, 0),
         weights = weights,
@@ -386,15 +339,13 @@ ddhazard = function(formula, data,
     "class" = "ddhazard")
 }
 
-ddhazard_no_validation <- function(a_0, Q_0, F., verbose, Q,
-                                   risk_set, X_Y, model, LR,
-                                   n_fixed_terms_in_state_vec,
-                                   weights = weights,
-                                   control, R, L, m){
+ddhazard_no_validation <- function(
+  a_0, Q_0, F., verbose, Q, risk_set, X_Y, model, LR, n_fixed_terms_in_state_vec,
+  weights = weights, control, R, L){
   ddhazard_fit_cpp(
     a_0 = a_0, Q_0 = Q_0, F_ = F., verbose = verbose,
     Q = Q, n_max = control$n_max,
-    R = R, L = L, m = m,
+    R = R, L = L,
     risk_obj = risk_set, eps = control$eps,
     X = X_Y$X, fixed_terms = X_Y$fixed_terms,
     fixed_parems_start = control$fixed_parems_start,
@@ -417,11 +368,13 @@ ddhazard_no_validation <- function(a_0, Q_0, F., verbose, Q,
     posterior_version = control$posterior_version,
     GMA_max_rep = control$GMA_max_rep,
     GMA_NR_eps = control$GMA_NR_eps,
-    EKF_batch_size = control$EKF_batch_size)
+    EKF_batch_size = control$EKF_batch_size,
+    est_a_0 = control$est_a_0)
 }
 
 get_state_eq_matrices <-  function(
-  order, n_params, n_fixed, est_fixed_in_E, Q_0, Q, a_0, control){
+  order, n_params, n_fixed, est_fixed_in_E = FALSE, Q_0, Q, a_0, control,
+  type = "RW", F. = NULL){
   #####
   # Indices vector used later
   state_dim <- n_params * order + n_fixed * est_fixed_in_E
@@ -454,43 +407,37 @@ get_state_eq_matrices <-  function(
   if(is.vector(Q_0) && length(Q_0) == 1)
     Q_0 <- matrix(Q_0)
 
-  if(ncol(Q) != n_params)
-    stop("Q does not have the correct dimension. Its dimension should be ",
-         n_params, " but it has ", ncol(Q), " columns")
-
-  os <- n_params * order + (
-    if(est_fixed_in_E) c(0, length(indicies_fix))  else 0)
-  if(!ncol(Q_0) %in% os){
-    .str <- if(length(os) == 1) n_params * order else paste(os[1], "or", os[2])
-    stop("Q_0 does not have the correct dimension. Its dimension should be ",
-         .str,
-         " but it has ", ncol(Q_0), " columns")
-  }
-
   if(!order %in% 1:2)
     stop("Method not implemented for order ", order)
 
   #####
   # Get F matrix
-  if(order == 1){
-    F. <- diag(rep(1, n_params + n_fixed * est_fixed_in_E))
+  if(is.null(F.)){
+    if(type == "RW"){
+      if(order == 1){
+        F. <- diag(rep(1, n_params + n_fixed * est_fixed_in_E))
 
-  } else if(order == 2){
-    F. = matrix(NA_real_,
-                nrow = 2 * n_params + n_fixed * est_fixed_in_E,
-                ncol = 2 * n_params + n_fixed * est_fixed_in_E)
-    F.[indicies_cur, indicies_cur] = diag(2, n_params)
-    F.[indicies_lag, indicies_cur] = diag(1, n_params)
-    F.[indicies_cur, indicies_lag] = diag(-1, n_params)
-    F.[indicies_lag, indicies_lag] = 0
+      } else if(order == 2){
+        F. = matrix(NA_real_,
+                    nrow = 2 * n_params + n_fixed * est_fixed_in_E,
+                    ncol = 2 * n_params + n_fixed * est_fixed_in_E)
+        F.[indicies_cur, indicies_cur] = diag(2, n_params)
+        F.[indicies_lag, indicies_cur] = diag(1, n_params)
+        F.[indicies_cur, indicies_lag] = diag(-1, n_params)
+        F.[indicies_lag, indicies_lag] = 0
 
-    if(length(indicies_fix) > 0){
-      F.[indicies_fix, ] <- 0
-      F.[, indicies_fix] <- 0
-      if(length(indicies_fix) > 1)
-        diag(F.[indicies_fix, indicies_fix]) <- 1 else
-          F.[indicies_fix, indicies_fix] <- 1
-    }
+        if(length(indicies_fix) > 0){
+          F.[indicies_fix, ] <- 0
+          F.[, indicies_fix] <- 0
+          if(length(indicies_fix) > 1)
+            diag(F.[indicies_fix, indicies_fix]) <- 1 else
+              F.[indicies_fix, indicies_fix] <- 1
+        }
+      }
+    } else if(type == "VAR" && order == 1 && !est_fixed_in_E){
+      F. <- diag(.1, n_params) # TODO: find better default
+    } else
+      stop("Default parameter not implemented for ", sQuote("F."))
   }
 
   #####
@@ -523,40 +470,149 @@ get_state_eq_matrices <-  function(
 
   #####
   # Setup for other matrices and vectors
-  R <- matrix(0, state_dim, ncol(Q))
+  R <- matrix(0, state_dim, n_params)
   if(n_params > 0)
     diag(R)[1:n_params] <- 1
   ncol_L <- n_params +  n_fixed * est_fixed_in_E
   L <- matrix(0, ncol_L, state_dim)
   if(n_params + n_fixed * est_fixed_in_E > 0)
     diag(L)[1:ncol_L] <- 1
-  m <- numeric(state_dim)
 
-  return(list(Q = Q, Q_0 = Q_0, F. = F., R = R, L = L, m = m, a_0 = a_0,
-              indicies_fix = indicies_fix))
+  return(list(
+    Q = Q, Q_0 = Q_0, F. = F., R = R, L = L, a_0 = a_0,
+    indicies_fix = indicies_fix))
+}
+
+.check_filter_input <- function(
+  Q, Q_0, F., R, a_0, L = NULL, fixed_parems, est_fixed_in_E,
+  X, fixed_terms, order, has_transposed_design = TRUE, Q_tilde = NULL,
+  G = NULL, J = NULL, K = NULL, theta = NULL, psi = NULL, phi = NULL){
+  lp_dim  <- if(has_transposed_design) nrow(          X) else ncol(          X)
+  fix_dim <- if(has_transposed_design) nrow(fixed_terms) else ncol(fixed_terms)
+  state_dim <- lp_dim * order + fix_dim * est_fixed_in_E
+  rng_dim   <- lp_dim
+
+  .check_full_rank_square  (Q      , rng_dim  , TRUE , is_null_ok = TRUE)
+  .check_full_rank_square  (Q_0    , state_dim, TRUE , is_null_ok = TRUE)
+  .check_full_rank_square  (F.     , state_dim, FALSE, is_null_ok = TRUE)
+  .check_full_rank_square(Q_tilde  , rng_dim  , TRUE , is_null_ok = TRUE)
+
+  .check_selection_matrix(R, state_dim, rng_dim)
+  if(!is.null(L))
+    .check_selection_matrix(L, lp_dim + fix_dim * est_fixed_in_E, state_dim)
+
+  if(!length(a_0) == state_dim)
+    stop("Invalid ", sQuote("a_0"))
+  if(!length(fixed_parems) == fix_dim)
+    stop("Invalid ", sQuote("fixed_terms"))
+
+  if(!is.null(G) || !is.null(theta)){
+    stopifnot(nrow(G) == state_dim^2, ncol(G) == length(theta),
+              length(theta) <= nrow(G), qr(G)$rank == ncol(G))
+    F. <- .get_F(G, theta)
+    if(qr(F.)$rank < ncol(F.))
+      stop(sQuote("F"), " is singular with the starting values")
+
+  }
+  if(!is.null(J) || !is.null(psi) || !is.null(K) || !is.null(phi)){
+    stopifnot(nrow(J) == rng_dim, ncol(J) == length(psi),
+              length(psi) <= nrow(J), qr(J)$rank == ncol(J))
+    stopifnot(nrow(K) == rng_dim * (rng_dim - 1) / 2, ncol(K) == length(phi),
+              length(phi) <= nrow(K), qr(K)$rank == ncol(K))
+
+    Q <- .get_Q(J, K, psi, phi)$Q
+    eg <- eigen(Q)
+
+    if(any(abs(eg$values) < 1e-10))
+      stop(sQuote("Q"), " is not positive definite with the starting values")
+  }
+
+
+  invisible(TRUE)
+}
+
+.check_full_rank_square <- function(X, expected_dim, pos_def,
+                                    is_null_ok = FALSE){
+  qu <- substitute({
+    if(!is.null(X) || !is_null_ok){
+      if(ncol(X) != n || nrow(X) != n)
+        stop("Invalid dimensions of ", sQuote(Xstr), ". Should be (", n,
+             ", ", n, ") but is ",
+             paste0("(", paste0(dim(X), collapse = ", "), ")"))
+      if(n > 0){
+        if(pos_def){
+          eg <- eigen(X)
+          if(!all(eg$values > 1e-8))
+            stop(sQuote(Xstr), " is not positive definite")
+        } else
+          if(qr(X)$rank < n)
+            stop(sQuote(Xstr), " does not have full rank")
+      }
+    }
+  }, list(X = substitute(X), Xstr = deparse(substitute(X)), n = expected_dim,
+          pos_def = pos_def, is_null_ok = is_null_ok))
+
+  eval(qu, envir = parent.frame())
+}
+
+.check_selection_matrix <- function(X, n, m){
+  qu <- substitute({
+    if(nrow(X) != n || ncol(X) != m)
+      stop("Invalid dimensions of ", sQuote(Xstr),  ". Should be (", m,
+           ", ", n, ") but is ",
+           paste0("(", paste0(dim(X), collapse = ", "), ")"))
+    if(!all(X %in% c(0, 1)))
+      stop("All entries of ", sQuote(Xstr), " are not zero or one")
+    if(n * m > 0 && !qr(X)$rank == min(n, m))
+      stop(sQuote(Xstr), " rank is less than ", min(n, m))
+  }, list(X = substitute(X), Xstr = deparse(substitute(X)), n = n, m = m))
+
+  eval(qu, envir = parent.frame())
 }
 
 # TODO: remove other exp_ names at some future point after 0.5.0 changes
 exp_model_names <- c(
   "exponential", "exp_bin", "exp_clip_time", "exp_clip_time_w_jump")
 
+#' @importFrom utils capture.output
 get_start_values <- function(
-  formula, data, max_T, X, fixed_terms, risk_set, verbose = FALSE, n_threads,
-  model, order, a_0 = NULL, fixed_parems_start = NULL){
-
+  data, formula, max_T, X, risk_obj, fixed_terms, risk_set, verbose = FALSE,
+  n_threads, model, order, a_0 = NULL, fixed_parems_start = NULL,
+  fixed = NULL, random = NULL, type){
   n_params = nrow(X)
   n_fixed = nrow(fixed_terms)
 
-  missing_a_0 <- is.null(a_0) && n_params > 0
-  missing_fixed <- is.null(fixed_parems_start) && n_fixed > 0
+  miss_a_0 <- is.null(a_0) && n_params > 0
+  miss_fix <- is.null(fixed_parems_start) && n_fixed > 0
 
-  if(!missing_a_0 && !missing_fixed){
+  finish <- function(a = a_0, f = fixed_parems_start,
+                     adj_a_0 = TRUE){
+    if(adj_a_0)
+      a <- rep(a, order)
+
+    if(verbose){
+      if(length(a) > 0)
+        message("Starting values for time-varying coeffecients are:\n",
+                paste0(capture.output(a), collapse = "\n"))
+      if(length(f > 0))
+        message("Starting values for fixed coeffecients are:\n",
+                paste0(capture.output(f), collapse = "\n"))
+    }
+
+    list(a_0 = a, fixed_parems_start = f)
+  }
+
+  if(!miss_a_0 && !miss_fix){
     if(is.null(fixed_parems_start))
       fixed_parems_start <- numeric()
     if(is.null(a_0))
       a_0 <- numeric()
 
-  } else if(n_params == 0){
+    return(finish(adj_a_0 = FALSE))
+
+  }
+
+  if(n_params == 0){
     # Model is fitted for testing
     warning("The model can be estimated more effeciently by using get_survival_case_Weights_and_data and static_glm when there is no time-varying parameters")
     a_0 = vector()
@@ -565,54 +621,62 @@ get_start_values <- function(
       fixed_parems_start <- rep(0, n_fixed) else
         fixed_parems_start <- fixed_parems_start
 
-  } else {
-    glm_func <- function(fam)
-      static_glm(
-        formula = formula, data = data, max_T = max_T, risk_obj = risk_set,
-        epsilon = sqrt(.Machine$double.eps) * 1e1, family = fam,
-        speedglm = FALSE, only_coef = TRUE, mf = cbind(t(X), t(fixed_terms)),
-        method_use = "parallelglm_quick", n_threads = n_threads)
+    return(finish(adj_a_0 = TRUE))
 
-    if(model == "logit"){
-      coefs = glm_func("binomial")
-
-    } else if(model %in% exp_model_names){
-      coefs = glm_func("exponential")
-
-    } else
-      stop("Method not implemented to find initial values for ", sQuote(model),
-           ". Please, provide intial values for a_0")
-
-    is_fixed <-
-      names(coefs) %in% rownames(fixed_terms) |
-      grepl("^ddFixed_intercept\\(", names(coefs), perl = TRUE)
-
-    if(is.null(a_0)){
-      message("a_0 not supplied. IWLS estimates of static glm model is used")
-      a_0 = rep(coefs[!is_fixed], order)
-
-      if(verbose){
-        message("Starting values for time-varying coeffecients are:")
-        print(a_0)
-      }
-    }
-
-    if(is.null(fixed_parems_start)){
-      fixed_parems_start <- coefs[is_fixed]
-
-      if(verbose && length(fixed_parems_start) > 0){
-        message("Starting values for fixed coeffecients are:")
-        print(fixed_parems_start)
-      }
-    }
   }
 
-  # check
-  if(length(a_0) != n_params * order)
-    stop("a_0 does not have the correct length. Its length should be ",
-         n_params * order, " but it has length ", length(a_0))
+  #####
+  # setup call with to use with different design matrices and families
+  cl <- bquote(static_glm(
+    formula = .(if(missing(formula)) quote(fixed) else quote(formula)),
+    data = data, max_T = max_T, risk_obj = risk_set,
+    epsilon = sqrt(.Machine$double.eps) * 1e1,
+    speedglm = FALSE, only_coef = TRUE, mf = mt,
+    method_use = "parallelglm_quick", n_threads = n_threads))
 
-  return(list(a_0 = a_0, fixed_parems_start = fixed_parems_start))
+  if(model == "logit"){
+    cl$family <- "binomial"
+
+  } else if(model %in% exp_model_names){
+    cl$family <- "exponential"
+
+  } else
+    stop("Method not implemented to find initial values for ", sQuote(model),
+         ". Please, provide intial values for a_0")
+
+  if(type == "VAR"){
+    if(miss_fix){
+      mt <- t(fixed_terms)
+      fixed_parems_start <- eval(cl)
+
+    } else if(nrow(fixed_terms) == 0L)
+      fixed_parems_start <- numeric()
+
+    if(miss_a_0)
+      a_0 <- numeric(nrow(X)) else if (nrow(X) == 0L)
+        a_0 <- numeric()
+
+  } else if (type == "RW") {
+    mt <- cbind(t(X), t(fixed_terms))
+    out <- eval(cl)
+    if(miss_fix)
+      fixed_parems_start <- out[-(1:nrow(X))] else if(nrow(fixed_terms) == 0L)
+        fixed_parems_start <- numeric()
+
+    if(miss_a_0)
+      a_0 <- out[1:nrow(X)] else if(nrow(X) == 0L)
+        a_0 <- numeric()
+
+  } else
+    stop("type ", sQuote(type), " is not supported")
+
+  if(!miss_a_0 && miss_fix)
+    return(finish(adj_a_0 = TRUE))
+
+  # give an additional message
+  message("a_0 not supplied. IWLS estimates of static glm model is used",
+          " for random walk models. Otherwise the values are zero")
+  return(finish(adj_a_0 = TRUE))
 }
 
 report_pre_liminary_stats_before_EM <- function(risk_set, Y){
@@ -653,8 +717,9 @@ report_pre_liminary_stats_before_EM <- function(risk_set, Y){
 }
 
 get_design_matrix_and_risk_obj <- function(
-  formula, data, by, max_T = NULL, id, verbose = FALSE, is_for_discrete_model){
-  X_Y = get_design_matrix(formula, data)
+  formula, data, by, max_T = NULL, id, verbose = FALSE, is_for_discrete_model,
+  fixed = NULL, random = NULL){
+  X_Y = get_design_matrix(formula, data, fixed = fixed, random = random)
 
   if(verbose)
     message("Finding Risk set")
@@ -671,3 +736,120 @@ get_design_matrix_and_risk_obj <- function(
   list(X_Y = X_Y, risk_set = risk_set,
        n_params = ncol(X_Y$X), n_fixed = ncol(X_Y$fixed_terms))
 }
+
+#' @title Auxiliary for Controlling Dynamic Hazard Models
+#'
+#' @description
+#' Auxiliary for additional settings with \code{\link{ddhazard}}.
+#'
+#' @param method set to the method to use in the E-step. Either \code{"EKF"}
+#' for the Extended Kalman Filter, \code{"UKF"} for the Unscented Kalman
+#' Filter, \code{"SMA"} for the sequential posterior mode approximation method
+#' or \code{"GMA"} for the global mode approximation method. \code{"EKF"} is
+#' the default.
+#' @param LR learning rate.
+#' @param NR_eps tolerance for the Extended Kalman filter. Default is
+#' \code{NULL} which means that no extra iteration is made in the correction
+#' step.
+#' @param alpha hyper parameter \eqn{\alpha} in the unscented Kalman Filter.
+#' @param beta hyper parameter \eqn{\beta} in the unscented Kalman Filter.
+#' @param kappa hyper parameter \eqn{\kappa} in the unscented Kalman Filter.
+#' @param n_max maximum number of iteration in the EM-algorithm.
+#' @param eps tolerance parameter for the EM-algorithm
+#' @param est_Q_0 \code{TRUE} if you want the EM-algorithm to estimate
+#' \code{Q_0}. Default is \code{FALSE}.
+#' @param save_risk_set \code{TRUE} if you want to save the list from
+#' \code{\link{get_risk_obj}} used to estimate the model. It may be needed for
+#' later calls to e.g., \code{residuals}, \code{plot} and \code{logLike}.
+#' @param save_data \code{TRUE} if you want to keep the \code{data} argument.
+#' It may be needed for later calls to e.g., \code{residuals}, \code{plot} and
+#' \code{logLike}.
+#' @param denom_term term added to denominators in either the EKF or UKF.
+#' @param n_threads maximum number of threads to use.
+#' @param fixed_parems_start starting value for fixed terms.
+#' @param fixed_terms_method the method used to estimate the fixed effects.
+#' Either \code{'M_step'} or \code{'E_step'} for estimation in the M-step or
+#' E-step respectively.
+#' @param Q_0_term_for_fixed_E_step the diagonal value of the initial
+#' covariance matrix, \code{Q_0}, for the fixed effects if fixed effects are
+#' estimated in the E-step.
+#' @param eps_fixed_parems tolerance used in the M-step of the Fisher's scoring
+#' algorithm for the fixed effects
+#' @param permu \code{TRUE} if the risk sets should be permutated before
+#' computation. This is \code{TRUE} by default for posterior mode approximation
+#' method and \code{FALSE} for all other methods.
+#' @param posterior_version the implementation version of the posterior
+#' approximation method. Either \code{"woodbury"} or \code{"cholesky"}.
+#' @param GMA_max_rep maximum number of iterations in the correction step if
+#' \code{method = 'GMA'}.
+#' @param GMA_NR_eps tolerance for the convergence criteria for the relative
+#' change in the norm of the coefficients in the correction step if
+#' \code{method = 'GMA'}.
+#' @param est_a_0 \code{FALSE} if the starting value of the state model should
+#' be fixed.
+#' @param ... additional undocumented arguments
+#'
+#' @return
+#' A list with components named as the arguments.
+#'
+#' @seealso \code{\link{ddhazard}}
+#'
+#' @export
+ddhazard_control <- function(
+  kappa = NULL, alpha = 1, beta = 0,
+  NR_eps = NULL, LR = 1, n_max = 10^2, eps = 1e-3,
+  est_Q_0 = F, method = "EKF", save_risk_set = T,
+  save_data = T, eps_fixed_parems = 1e-4,
+  fixed_parems_start = NULL,
+  n_threads = getOption("ddhazard_max_threads"),
+  denom_term = 1e-5,
+  fixed_terms_method = "E_step",
+  Q_0_term_for_fixed_E_step = NULL,
+  permu = if(!is.null(method)) method == "SMA" else F,
+  posterior_version = "cholesky", GMA_max_rep = 25, GMA_NR_eps = 1e-4,
+  est_a_0 = TRUE, ...) {
+  dts <- list(...)
+  xtra <- ddhazard_control_xtra_get()
+  ma <- match(names(dts), names(xtra), NA_integer_)
+  if(anyNA(ma))
+    stop("Unused arguments passed to ", sQuote("ddhazard_control"))
+  if(length(ma) > 0)
+    xtra[ma] <- dts
+
+  control <- c(list(
+    kappa = kappa, alpha = alpha, beta = beta, NR_eps = NR_eps, LR = LR,
+    n_max = n_max, eps = eps, est_Q_0 = est_Q_0, method = method,
+    save_risk_set = save_risk_set, save_data = save_data,
+    eps_fixed_parems = eps_fixed_parems,
+    fixed_parems_start = fixed_parems_start, n_threads = n_threads,
+    denom_term = denom_term, fixed_terms_method = fixed_terms_method,
+    Q_0_term_for_fixed_E_step = Q_0_term_for_fixed_E_step, permu = permu,
+    posterior_version = posterior_version, GMA_max_rep = GMA_max_rep,
+    GMA_NR_eps = GMA_NR_eps, est_a_0 = est_a_0), xtra)
+  if(!control$criteria %in% c("delta_coef", "delta_likeli"))
+    stop("Convergence criteria ", control$criteria, " not implemented")
+
+  if(is.null(control$Q_0_term_for_fixed_E_step))
+    control$Q_0_term_for_fixed_E_step <- ifelse(
+      # quite abritary values (especially the former - the latter is not too
+      # important).
+      control$method %in% c("UKF", "GMA"), 1, 1e5)
+
+  if(!control$fixed_terms_method %in% c("M_step", "E_step"))
+    stop("fixed_terms_method method ", sQuote(control$fixed_terms_method),
+         " is not implemented")
+
+  if(control$denom_term <= 0){
+    stop("Method not implemented with penalty term ",
+         sQuote("control$denom_term"), " equal to ", control$denom_term)
+
+  }
+
+  control
+}
+
+ddhazard_control_xtra_get <- function()
+  list(
+    max_it_fixed_params = 25, fixed_effect_chunk_size = 1e4, debug = F,
+    LR_max_try = 10, LR_decrease_fac = 0.9, use_pinv = FALSE,
+    criteria = "delta_coef", EKF_batch_size = 500L)

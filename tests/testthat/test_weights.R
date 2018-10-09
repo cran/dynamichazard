@@ -7,8 +7,9 @@ test_that("Passing fewer weigths than rows in design mat throws error",{
       formula = survival::Surv(start, stop, event) ~ group,
       data = head_neck_cancer,
       by = 1,
-      control = list(est_Q_0 = F, n_max = 10^4, eps = 10^-4,
-                     save_data = F, save_risk_set = F),
+      control = ddhazard_control(
+        est_Q_0 = F, n_max = 10^4, eps = 10^-4,
+        save_data = F, save_risk_set = F),
       a_0 = rep(0, 2), Q_0 = diag(1, 2),
       max_T = 45,
       id = head_neck_cancer$id, order = 1,
@@ -48,7 +49,7 @@ test_that("Making large design mat and using weights yield the same with EKF",{
       data = dum_design,
       by = 5, model = m,
       a_0 = c(-2,0), Q_0 = diag(100, 2), Q = diag(1e-2, 2),
-      control = list(method = meth, denom_term = 1e-3),
+      control = ddhazard_control(method = meth, denom_term = 1e-3),
       max_T = 25, order = 1)
 
     suppressMessages(f2 <- ddhazard(
@@ -56,7 +57,7 @@ test_that("Making large design mat and using weights yield the same with EKF",{
       data = head_neck_cancer,
       by = 5, model = m,
       a_0 = c(-2, 0), Q_0 = diag(100, 2), Q = diag(1e-2, 2),
-      control = list(method = meth, denom_term = 1e-3),
+      control = ddhazard_control(method = meth, denom_term = 1e-3),
       max_T = 25, order = 1,
       weights = ws))
 
@@ -81,7 +82,7 @@ test_that("Making large design mat and using weights yield the same with UKF",{
       data = dum_design,
       by = 5, model = m,
       a_0 = c(-2,0), Q_0 = diag(1, 2), Q = diag(1e-2, 2),
-      control = list(method = meth, denom_term = 1e-3),
+      control = ddhazard_control(method = meth, denom_term = 1e-3),
       max_T = 25, order = 1)
 
     suppressMessages(f2 <- ddhazard(
@@ -89,7 +90,7 @@ test_that("Making large design mat and using weights yield the same with UKF",{
       data = head_neck_cancer,
       by = 5, model = m,
       a_0 = c(-2, 0), Q_0 = diag(1, 2), Q = diag(1e-2, 2),
-      control = list(method = meth, denom_term = 1e-3),
+      control = ddhazard_control(method = meth, denom_term = 1e-3),
       max_T = 25, order = 1,
       weights = ws))
 

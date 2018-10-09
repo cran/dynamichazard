@@ -16,7 +16,7 @@
 #'fit <- ddhazard(
 #'  Surv(time, status == 2) ~ log(bili), pbc, id = pbc$id, max_T = 3600,
 #'  Q_0 = diag(1, 2), Q = diag(1e-4, 2), by = 50,
-#'  control = list(method = "GMA"))
+#'  control = ddhazard_control(method = "GMA"))
 #'logLik(fit)
 #'
 #' @export
@@ -26,6 +26,7 @@ logLik.ddhazard = function(object, data = NULL, id, ...){
     stop("data is needed to compute log likelihood. Please, pass the data set used in 'ddhazard' call")
 
   X <- get_design_matrix(
+    formula = object$formula,
     data = data, Terms = object$terms, xlev = object$xlev,
     has_fixed_intercept = object$has_fixed_intercept)
   X$X <- t(X$X)

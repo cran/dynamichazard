@@ -164,7 +164,7 @@ dd_fit <- ddhazard(Surv(tstart, tstop, death == 2) ~ age + edema +
                         log(albumin) + log(protime) + log(bili), pbc2,
                    id = pbc2$id, by = 100, max_T = 3600, 
                    Q_0 = diag(100, 6), Q = diag(0.01, 6),
-                   control = list(eps = .001))
+                   control = ddhazard_control(eps = .001))
 
 plot(dd_fit)
 
@@ -177,7 +177,7 @@ dd_fit <- ddhazard(
     log(albumin) + log(protime) + log(bili), pbc2,
   id = pbc2$id, by = 100, max_T = 3600,
   Q_0 = diag(10 / sds), Q = diag(0.01 / sds, 6),
-  control = list(
+  control = ddhazard_control(
     eps = .001,
     NR_eps = 0.0001, # Tolerance in correction step
     LR = .33
@@ -192,8 +192,8 @@ dd_fit_UKF <- ddhazard(
          edema + log(albumin) + log(protime) + log(bili), pbc2,
    id = pbc2$id, by = 100, max_T = 3600, 
    Q_0 = diag(rep(1, 6)), Q = diag(rep(0.01, 6)),
-   control = list(method = "UKF", beta = 0, alpha = 1,
-                  eps = 0.1, n_max = 1e4))
+   control = ddhazard_control(method = "UKF", beta = 0, alpha = 1,
+                              eps = 0.1, n_max = 1e4))
 
 plot(dd_fit_UKF)
 
@@ -207,8 +207,8 @@ plot(dd_fit_UKF)
 #     id = pbc2$id, by = 100, max_T = 3600,
 #     Q_0 = diag(rep(1, 6)), Q = diag(rep(0.01, 6)),
 #     control =
-#       list(method = "UKF", beta = 0, alpha = 1,
-#            debug = T)) # <-- prints information in each iteration
+#       ddhazard_control(method = "UKF", beta = 0, alpha = 1,
+#                        debug = T)) # <-- prints information in each iteration
 #  sink()
 #  close(tmp_file)
 
@@ -223,7 +223,7 @@ dd_fit_UKF <- ddhazard(
   Q_0 = diag(c(0.001, 0.00001, rep(0.001, 4))) * 100, # <-- decreased
   Q = diag(0.0001, 6),                                # <-- decreased
   control = 
-    list(method = "UKF", beta = 0, alpha = 1, eps = 0.001))
+    ddhazard_control(method = "UKF", beta = 0, alpha = 1, eps = 0.001))
 
 plot(dd_fit_UKF)
 
@@ -237,7 +237,7 @@ dd_fit_EKF <-
        log(albumin) + log(protime) + log(bili), pbc2,
     id = pbc2$id, by = 100, max_T = 3600,
     Q_0 = diag(100, 6), Q = diag(0.01, 6),
-    control = list(eps = .001))
+    control = ddhazard_control(eps = .001))
 
 dd_fit_SMA <- 
   ddhazard(
@@ -245,7 +245,7 @@ dd_fit_SMA <-
      log(albumin) + log(protime) + log(bili), pbc2,
     id = pbc2$id, by = 100, max_T = 3600,
     Q_0 = diag(100, 6), Q = diag(0.01, 6),
-    control = list(
+    control = ddhazard_control(
        method = "SMA", # change estimation method 
        eps = 0.001))
 
@@ -268,19 +268,17 @@ for(i in 1:6){
 ## ---- warning=FALSE-----------------------------------------------------------
 dd_fit <- ddhazard(
   Surv(tstart, tstop, death == 2) ~ ddFixed_intercept() + 
-    ddFixed(age) + ddFixed(log(albumin)) + edema + ddFixed(log(protime)) + log(bili), 
+    ddFixed(age) + ddFixed(log(albumin)) + edema + ddFixed(log(protime)) + 
+    log(bili), 
   pbc2, id = pbc2$id, by = 100, max_T = 3600, 
   Q_0 = diag(100, 2), Q = diag(0.01, 2),
-  control = list(eps = .001))
+  control = ddhazard_control(eps = .001))
 
 ## ---- fig.height = 5, mySettings=FALSE, plot_2x1 = TRUE-----------------------
 plot(dd_fit)
 
 ## -----------------------------------------------------------------------------
 dd_fit$fixed_effects
-
-## ---- echo = FALSE------------------------------------------------------------
-set.seed(3434439) # <-- Data is permuated so we set a seed
 
 ## -----------------------------------------------------------------------------
 # Define formula
@@ -292,28 +290,18 @@ form <- Surv(tstart, tstop, death == 2) ~
 # Fit models
 dd_fit_EKF <- 
   ddhazard(form, 
-          pbc2, id = pbc2$id, by = 100, max_T = 3600, 
+           pbc2, id = pbc2$id, by = 100, max_T = 3600, 
  
-          order = 2,          # <-- second order
-          Q_0 = diag(100, 2),   # <-- needs more elements
-          Q = .00001,         # <-- decreased
+           order = 2,            # <-- second order
+           Q_0 = diag(5, 2),     # <-- needs more elements
+           Q = .0001,            # <-- decreased
           
-          control = list(eps = .001))
-
-dd_fit_post <- 
-  ddhazard(form, 
-          pbc2, id = pbc2$id, by = 100, max_T = 3600, 
-          order = 2,          
-          Q_0 = diag(100, 2), 
-          Q = .00001,         
-          control = list(eps = .001, method = "SMA"))
+           control = ddhazard_control(
+             eps = .0001, est_a_0 = FALSE))
 
 ## -----------------------------------------------------------------------------
-rbind(
-  "EKF" = dd_fit_EKF$fixed_effects,
-  "Posterior approximation" = dd_fit_post$fixed_effects)
+dd_fit_EKF$fixed_effects
 
 ## -----------------------------------------------------------------------------
 plot(dd_fit_EKF)
-plot(dd_fit_post, col = "red", add = T)
 

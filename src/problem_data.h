@@ -32,12 +32,6 @@ protected:
   }
 
   virtual
-  std::unique_ptr<linear_mapper> set_state_trans_err_inv
-  (const arma::mat &F, const arma::mat R){
-    return std::unique_ptr<inv_sub_mapper>(new inv_sub_mapper(F, R));
-  }
-
-  virtual
   std::unique_ptr<linear_mapper> set_err_state(const arma::mat &R){
     return std::unique_ptr<select_mapper>(new select_mapper(R));
   }
@@ -127,7 +121,6 @@ public:
   const std::unique_ptr<linear_mapper> state_trans;
   const std::unique_ptr<linear_mapper> state_trans_inv;
   const std::unique_ptr<linear_mapper> state_trans_err;
-  const std::unique_ptr<linear_mapper> state_trans_err_inv;
 
   const std::unique_ptr<linear_mapper> err_state;
   const std::unique_ptr<linear_mapper> err_state_inv;
@@ -145,7 +138,6 @@ public:
     const arma::colvec &a_0,
     const arma::mat &R,
     const arma::mat &L,
-    const arma::vec &m, // TODO: remove
     arma::mat &Q_0,
     arma::mat &Q,
     const Rcpp::List &risk_obj,
@@ -188,7 +180,6 @@ public:
     state_trans(set_state_trans(F_)),
     state_trans_inv(set_state_trans_inv(F_)),
     state_trans_err(set_state_trans_err(F_, R)),
-    state_trans_err_inv(set_state_trans_err_inv(F_, R)),
 
     err_state(set_err_state(R)),
     err_state_inv(set_err_state_inv(R)),
@@ -249,14 +240,6 @@ private:
     return T::set_state_trans_err(F, R);
   }
 
-  std::unique_ptr<linear_mapper> set_state_trans_err_inv
-  (const arma::mat &F, const arma::mat R) override {
-    if(order == 1)
-      return std::unique_ptr<select_mapper>(new select_mapper(F));
-
-    return T::set_state_trans_err_inv(F, R);
-  }
-
 public:
   using T::T;
 };
@@ -306,7 +289,6 @@ public:
                 const arma::vec &fixed_parems_start,
                 const arma::mat &R,
                 const arma::mat &L,
-                const arma::vec &m,
                 arma::mat &Q_0,
                 arma::mat &Q,
                 const Rcpp::List &risk_obj,
@@ -323,21 +305,8 @@ public:
                 const double denom_term,
                 const bool use_pinv):
     problem_data(
-      n_fixed_terms_in_state_vec,
-      X,
-      fixed_terms,
-      tstart,
-      tstop, is_event_in_bin,
-      a_0,
-      R,
-      L,
-      m,
-      Q_0,
-      Q,
-      risk_obj,
-      F_,
-      n_max,
-      n_threads,
+      n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop,
+      is_event_in_bin, a_0, R, L, Q_0, Q, risk_obj, F_, n_max, n_threads,
       fixed_parems_start),
     weights(weights),
 

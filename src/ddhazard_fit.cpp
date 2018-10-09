@@ -19,7 +19,6 @@ Rcpp::List ddhazard_fit_cpp(
     const arma::vec &fixed_parems_start,
     arma::mat R,
     arma::mat L,
-    arma::vec m,
     arma::mat Q_0, // by value copy. This  is key cuz we will change it if est_Q_0 = T
     arma::mat Q, // similarly this is a copy
     const Rcpp::List &risk_obj,
@@ -47,7 +46,7 @@ Rcpp::List ddhazard_fit_cpp(
     const std::string posterior_version = "cholesky",
     const unsigned int GMA_max_rep = 10,
     const double GMA_NR_eps = 0.1,
-    const int EKF_batch_size = 5000L){
+    const int EKF_batch_size = 5000L, const bool est_a_0 = true){
   if(Rcpp::as<bool>(risk_obj["is_for_discrete_model"]) &&
      is_exponential_model(model)){
     Rcpp::stop("risk_obj has 'is_for_discrete_model' = true which should be false for model '" + model  +"'");
@@ -70,44 +69,31 @@ Rcpp::List ddhazard_fit_cpp(
 
   // Intialize the solver for the E-step
   std::unique_ptr<ddhazard_data> p_data(new random_walk<ddhazard_data>(
-      n_fixed_terms_in_state_vec,
-      X, fixed_terms, tstart, tstop, is_event_in_bin,
-      a_0, fixed_parems_start,
-      R, L, m, Q_0, Q,
-      risk_obj, F_,
-      eps_fixed_parems, max_it_fixed_params,
-      weights,
-      n_max, eps, verbose,
+      n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop,
+      is_event_in_bin, a_0, fixed_parems_start, R, L, Q_0, Q, risk_obj, F_,
+      eps_fixed_parems, max_it_fixed_params,weights, n_max, eps, verbose,
       est_Q_0, debug, LR, n_threads, denom_term, use_pinv));
+
   std::unique_ptr<Solver> solver;
+  std::unique_ptr<family_base> fam;
+
+  if(model == "logit"){
+    fam.reset(new logistic());
+
+  } else if (is_exponential_model(model)){
+    fam.reset(new exponential());
+
+  } else
+    Rcpp::stop("EKF is not implemented for model '" + model  +"'");
 
   if(method == "EKF"){
-    if(model == "logit"){
-      solver.reset(new EKF_solver<logistic>(
-          *p_data.get(), model, NR_eps, NR_it_max, EKF_batch_size));
-
-    } else if (is_exponential_model(model)){
-      solver.reset(new EKF_solver<exponential>(
-          *p_data.get(), model, NR_eps, NR_it_max, EKF_batch_size));
-
-    } else
-      Rcpp::stop("EKF is not implemented for model '" + model  +"'");
+    solver.reset(new EKF_solver(
+        *p_data.get(), model, NR_eps, NR_it_max, EKF_batch_size,
+        *fam.get()));
 
   } else if (method == "UKF"){
-    if(model != "logit" &&
-       !is_exponential_model(model))
-      Rcpp::stop("UKF is not implemented for model '" + model  +"'");
-
-    if(model == "logit"){
-      solver.reset(
-        new UKF_solver_New<logistic>(*p_data.get(), kappa, alpha, beta));
-
-    } else if (is_exponential_model(model)){
-      solver.reset(
-        new UKF_solver_New<exponential>(*p_data.get(), kappa, alpha, beta));
-
-    } else
-      Rcpp::stop("Model '", model ,"' is not implemented with UKF");
+    solver.reset(
+      new UKF_solver_New(*p_data.get(), kappa, alpha, beta, *fam.get()));
 
   } else if (method == "UKF_org"){
     if(model != "logit")
@@ -119,24 +105,10 @@ Rcpp::List ddhazard_fit_cpp(
     solver.reset(new UKF_solver_Org(*p_data.get(), kappa));
 
   } else if (method == "SMA"){
-    if(model == "logit"){
-      solver.reset(new SMA<logistic>(*p_data.get(), posterior_version));
-
-    } else if(is_exponential_model(model)){
-      solver.reset(new SMA<exponential>(*p_data.get(), posterior_version));
-
-    } else
-      Rcpp::stop("Model '", model ,"' is not implemented with rank one posterior approximation");
+    solver.reset(new SMA(*p_data.get(), posterior_version, *fam.get()));
 
   } else if (method == "GMA"){
-    if(model == "logit"){
-      solver.reset(new GMA<logistic>(*p_data.get(), GMA_max_rep, GMA_NR_eps));
-
-    }  else if(is_exponential_model(model)){
-      solver.reset(new GMA<exponential>(*p_data.get(), GMA_max_rep, GMA_NR_eps));
-
-    } else
-      Rcpp::stop("Model '", model ,"' is not implemented with rank one posterior approximation");
+    solver.reset(new GMA(*p_data.get(), GMA_max_rep, GMA_NR_eps, *fam.get()));
 
   } else
     Rcpp::stop("method '" + method  + "'is not implemented");
@@ -176,6 +148,10 @@ Rcpp::List ddhazard_fit_cpp(
   // main loop for estimation
   do
   {
+    if(!est_a_0)
+      /* fix a_0 */
+      p_data->a_t_t_s.col(0) = a_0;
+
     p_data->em_iteration = it;
     p_data->computation_stage = "Starting EM";
 
@@ -322,16 +298,8 @@ Rcpp::List ddhazard_fit_cpp(
     if(p_data->any_fixed_in_M_step){
       arma::vec old = p_data->fixed_parems;
 
-      if(model == "logit"){
-        estimate_fixed_effects_M_step<bigglm_updateQR<logistic>>(
-          p_data.get(), fixed_effect_chunk_size);
-
-      } else if(is_exponential_model(model)){
-        estimate_fixed_effects_M_step<bigglm_updateQR<exponential>>(
-          p_data.get(), fixed_effect_chunk_size);
-
-      } else
-        Rcpp::stop("Fixed effects is not implemented for '" + model  +"'");
+      estimate_fixed_effects_M_step(
+        p_data.get(), fixed_effect_chunk_size, *fam.get());
 
       // update fixed effects
       p_data->fixed_effects = p_data->fixed_terms.t() * p_data->fixed_parems;

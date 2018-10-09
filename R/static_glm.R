@@ -9,9 +9,9 @@
 #' @param c_outcome,c_weights,c_end_t alternative names to use for the added columns described in the return section. Useful if you already have a column named \code{Y}, \code{t} or \code{weights}.
 #'
 #' @details
-#' This function is used to get the \code{data.frame} for e.g. a \code{glm} fit that is comparable to a \code{\link{ddhazard}} fit in the sense that it is a static version. For example, say that we bin our time periods into \code{(0,1]}, \code{(1,2]} and \code{(2,3]}. Next, consider an individual who dies at time 2.5. He should be a control in the the first two bins and should be a case in the last bin. Thus the rows in the final data frame for this individual is \code{c(Y = 1, ..., weights = 1)} and \code{c(Y = 0, ..., weights = 2)} where \code{Y} is the outcome, \code{...} is the co-variates and \code{weights} is the weights for the regression. Consider another individual who does not die and we observe him for all three periods. Thus, he will yield one row with \code{c(Y = 0, ..., weights = 3)}.
+#' This function is used to get the \code{data.frame} for e.g. a \code{glm} fit that is comparable to a \code{\link{ddhazard}} fit in the sense that it is a static version. For example, say that we bin our time periods into \code{(0,1]}, \code{(1,2]} and \code{(2,3]}. Next, consider an individual who dies at time 2.5. He should be a control in the the first two bins and should be a case in the last bin. Thus the rows in the final data frame for this individual is \code{c(Y = 1, ..., weights = 1)} and \code{c(Y = 0, ..., weights = 2)} where \code{Y} is the outcome, \code{...} is the covariates and \code{weights} is the weights for the regression. Consider another individual who does not die and we observe him for all three periods. Thus, he will yield one row with \code{c(Y = 0, ..., weights = 3)}.
 #'
-#' This function use similar logic as the \code{ddhazard} for individuals with time varying co-variates (see the vignette \code{vignette("ddhazard", "dynamichazard")} for details).
+#' This function use similar logic as the \code{ddhazard} for individuals with time varying covariates (see the vignette \code{vignette("ddhazard", "dynamichazard")} for details).
 #'
 #' If \code{use_weights = FALSE} then the two previously mentioned individuals will yield three rows each. The first individual will have \code{c(Y = 0, t = 1, ..., weights = 1)}, \code{c(Y = 0, t = 2, ..., weights = 1)}, \code{c(Y = 1, t = 3, ..., weights = 1)} while the latter will have three rows \code{c(Y = 0, t = 1, ..., weights = 1)}, \code{c(Y = 0, t = 2, ..., weights = 1)}, \code{c(Y = 0, t = 3, ..., weights = 1)}. This kind of data frame is useful if you want to make a fit with e.g. \code{\link[mgcv]{gam}} function in the \code{mgcv} package as described en Tutz et. al (2016).
 #'
@@ -41,7 +41,7 @@
 #'  use_weights = FALSE)$X
 #'
 #' @export
-get_survival_case_weights_and_data = function(
+get_survival_case_weights_and_data <- function(
   formula, data, by, max_T, id, init_weights, risk_obj,
   use_weights = T, is_for_discrete_model = T,
   c_outcome = "Y",
@@ -142,7 +142,8 @@ change_new_var_name <- function(c_x, data){
           data[r_set_is_case, ],
           list(weights = init_weights[r_set_is_case]))))
 
-      new_weights[r_set_not_case] = new_weights[r_set_not_case] + init_weights[r_set_not_case]
+      new_weights[r_set_not_case] <-
+        new_weights[r_set_not_case] + init_weights[r_set_not_case]
     }
 
     do_keep <- new_weights > 0
@@ -248,13 +249,13 @@ change_new_var_name <- function(c_x, data){
 #'
 #'
 #' @export
-static_glm = function(
+static_glm <- function(
   formula, data, by, max_T, ..., id, family = "logit", model = F, weights,
   risk_obj = NULL, speedglm = F, only_coef = FALSE, mf,
   method_use = c("glm", "speedglm", "parallelglm_quick", "parallelglm_QR"),
   n_threads = getOption("ddhazard_max_threads")){
   if(only_coef && missing(mf))
-    stop("mf must be supplied when only_coef = TRUE")
+    stop("mf must be supplied when ", sQuote("only_coef = TRUE"))
 
   if(!missing(mf) && nrow(mf) != nrow(data))
     stop("data and mf must have the same number of rows")
@@ -264,6 +265,8 @@ static_glm = function(
             sQuote("method_use"))
 
   method_use <- method_use[1]
+
+  formula_org <- formula
 
   if(only_coef){
     # we mark the row numbers as some may be removed and the order may be
@@ -278,10 +281,16 @@ static_glm = function(
   c_weights <- change_new_var_name("weights", data = data)
   c_end_t   <- change_new_var_name("t", data = data)
 
+  if(!missing(mf)){
+    # we only need the outcome variable and weights from the next part
+    formula <- update(formula, . ~ 1)
+    data <- data[, c(all.vars(formula), col_for_row_n)]
+  }
+
   if(family %in% c("binomial", "logit")){
     family <- binomial()
 
-    tmp = get_survival_case_weights_and_data(
+    tmp <- get_survival_case_weights_and_data(
       formula = formula, data = data, by = by, max_T = max_T, id = id,
       init_weights = weights, risk_obj = risk_obj,
       c_outcome = c_outcome,
@@ -300,7 +309,7 @@ static_glm = function(
   } else if(family == "exponential"){
     family <- poisson()
 
-    tmp = get_survival_case_weights_and_data(
+    tmp <- get_survival_case_weights_and_data(
       formula = formula, data = data, by = by, max_T = max_T, id = id,
       init_weights = weights, risk_obj = risk_obj,
       is_for_discrete_model = FALSE,
@@ -332,10 +341,24 @@ static_glm = function(
   offset <- if(family$family == "poisson")
     data$log_delta_time else rep(0, nrow(data))
 
+  cl <- match.call()
+  cl <- cl[!names(cl) %in% names(formals(static_glm))]
+  cl[[1L]] <- quote(.static_glm_fit)
+
+  cl[c("method_use", "only_coef", "c_outcome", "c_weights", "family",
+       "offset", "data", "mf", "n_threads", "formula", "model")] <- list(
+         quote(method_use), quote(only_coef), quote(c_outcome),
+         quote(c_weights), quote(family), quote(offset), quote(data),
+         quote(mf), quote(n_threads), quote(formula), quote(model))
+
+  eval(cl, environment())
+}
+
+.static_glm_fit <- function(
+  method_use, only_coef, c_outcome, c_weights, family, offset, data, mf,
+  n_threads, formula, model, ...){
   if(method_use == "speedglm" && requireNamespace("speedglm", quietly = T)){
     if(only_coef){
-
-
       fit <- speedglm::speedglm.wfit(
         X = mf, y = data[[c_outcome]], weights = data[[c_weights]],
         family = family, offset = offset, ...)
@@ -372,14 +395,16 @@ static_glm = function(
     method. <- gsub("(^parallelglm_)([a-zA-Z]+$)", "\\2", method_use)
 
     out <- drop(
-      parallelglm(X = t(mf), Ys = data[[c_outcome]],
-                  weights = data[[c_weights]], offsets = offset, beta0 = numeric(),
-                  family = family$family, method = method.,
-                  tol = epsilon, nthreads = n_threads))
+      parallelglm(
+        X = t(mf), Ys = data[[c_outcome]],
+        weights = data[[c_weights]], offsets = offset, beta0 = numeric(),
+        family = family$family, method = method.,
+        tol = epsilon, nthreads = n_threads))
 
     return(structure(out, names = dimnames(mf)[[2]]))
 
-  } else
-    stop(sQuote("method_use"), " not implemented with ", sQuote("only_coef"),
-         " = ", only_coef)
+  }
+
+  stop(sQuote("method_use"), " not implemented with ", sQuote("only_coef"),
+       " = ", only_coef)
 }

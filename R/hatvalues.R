@@ -19,7 +19,7 @@
 #'fit <- ddhazard(
 #'  Surv(time, status == 2) ~ log(bili), pbc, id = pbc$id, max_T = 3000,
 #'  Q_0 = diag(1, 2), Q = diag(1e-4, 2), by = 100,
-#'  control = list(method = "GMA"))
+#'  control = ddhazard_control(method = "GMA"))
 #'hvs <- hatvalues(fit)
 #'head(hvs[[1]])
 #'head(hvs[[2]])
@@ -35,6 +35,7 @@ hatvalues.ddhazard <- function(model, ...){
   # get design matrix, save the start and stop times and include the fixed
   # effects
   design_mat <- get_design_matrix(
+    formula = model$formula,
     data = model$data, Terms = model$terms, xlev = model$xlev,
     has_fixed_intercept = model$has_fixed_intercept)
   tstart <- design_mat$Y[, 1]

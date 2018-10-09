@@ -29,7 +29,7 @@ if(getRversion() >= "2.15.1")
 #'fit <- ddhazard(
 #'  Surv(time, status == 2) ~ log(bili), pbc, id = pbc$id, max_T = 3000,
 #'  Q_0 = diag(1, 2), Q = diag(1e-4, 2), by = 100,
-#'  control = list(method = "GMA"))
+#'  control = ddhazard_control(method = "GMA"))
 #'bt <- ddhazard_boot(fit, R = 999)
 #'plot(fit, ddhazard_boot = bt, level = .9)
 #'}
@@ -50,6 +50,7 @@ ddhazard_boot <- function(
   list2env(ddhazard_fit[c("control", "id", "data", "order", "model")],
            environment())
   X_Y <- get_design_matrix(
+    formula = ddhazard_fit$formula,
     data = data, Terms = ddhazard_fit$terms, xlev = ddhazard_fit$xlev,
     has_fixed_intercept = ddhazard_fit$has_fixed_intercept)
 
@@ -159,7 +160,7 @@ ddhazard_boot <- function(
     for(l in LRs){
       tryCatch({
         suppressWarnings(est <- ddhazard_no_validation(
-          a_0 = a_0, Q_0 = Q_0, L = L, R = R_mat, m = m,
+          a_0 = a_0, Q_0 = Q_0, R = R_mat, L = L,
           F. = F., verbose = F, Q = Q,
           risk_set= boot_risk_set, X_Y = boot_X_Y,
           model = model,

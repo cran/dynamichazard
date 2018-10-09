@@ -13,7 +13,7 @@ test_that("Only fixed effects yields same results as bigglm with logit model", {
   suppressWarnings(
     res1 <- ddhazard(
       form, data = sims$res, model = "logit", by = 1, id = sims$res$id,
-      max_T = 10, control = list(
+      max_T = 10, control = ddhazard_control(
         eps_fixed_parems = 1e-3, fixed_effect_chunk_size = 1e3,
         max_it_fixed_params = 10, fixed_terms_method = "M_step")))
 
@@ -22,9 +22,9 @@ test_that("Only fixed effects yields same results as bigglm with logit model", {
     use_weights = F, max_T = 10)
 
   did_fail <- tryCatch(
-    res2 <- bigglm(
+    suppressWarnings(res2 <- bigglm(
       update(form, Y ~ . - ddFixed_intercept()), data = tmp_design$X,
-      family = binomial(), chunksize = 1e3),
+      family = binomial(), chunksize = 1e3)),
     error = function(...) TRUE)
   if(isTRUE(did_fail))
     skip("bigglm failed (likely biglm error in 0.9-1 release)")
@@ -58,7 +58,7 @@ test_that("Only fixed effects yields same results as bigglm and static_glm with 
 
   suppressWarnings(res1 <- ddhazard(
     form, data = sims$res, model = "exponential", by = 1,
-    id = sims$res$id, max_T = 10, control = list(
+    id = sims$res$id, max_T = 10, control = ddhazard_control(
       eps_fixed_parems = 1e-4, fixed_effect_chunk_size = 1e3,
       fixed_terms_method = "M_step")))
 
@@ -88,32 +88,36 @@ test_that("Only fixed effects yields same results as bigglm and static_glm with 
 
 test_that("Changing fixed effect control parems changes the result", {
   sims <- exp_sim_200
-  arg_list <- list(
+  cl <- quote(ddhazard(
     formula(survival::Surv(tstart, tstop, event) ~
               ddFixed_intercept() + ddFixed(x1) + ddFixed(x2) + ddFixed(x3)),
     data = sims$res, model = "exp_clip_time_w_jump", by = 1, id = sims$res$id,
-    max_T = 10, control = list(
+    max_T = 10, control = ddhazard_control(
       eps_fixed_parems = 1e-12, fixed_effect_chunk_size = 1e3,
-      fixed_terms_method = "M_step"))
+      fixed_terms_method = "M_step")))
 
-  suppressWarnings(res1 <- do.call(ddhazard, arg_list))
+  suppressWarnings(res1 <- eval(cl))
 
   # Should not make a difference
-  arg_list_tmp <- arg_list
-  arg_list_tmp$control$fixed_effect_chunk_size <- 1e4
-  suppressWarnings(res2 <- do.call(ddhazard, arg_list_tmp))
+  cl_tmp <- cl
+  ctrl <- eval(cl$control)
+  ctrl$fixed_effect_chunk_size <- 1e4
+  cl_tmp$control <- ctrl
+  suppressWarnings(res2 <- eval(cl_tmp))
   expect_equal(res2$fixed_effects, res1$fixed_effects)
 
   # Should make a difference
-  arg_list_tmp <- arg_list
-  arg_list_tmp$control$eps_fixed_parems <- 1
-  suppressWarnings(res2 <- do.call(ddhazard, arg_list_tmp))
+  ctrl <- eval(cl$control)
+  ctrl$eps_fixed_parems <- 1
+  cl_tmp$control <- ctrl
+  suppressWarnings(res2 <- eval(cl_tmp))
   expect_true(!all(res2$fixed_effects == res1$fixed_effects))
 
   # Should make a difference
-  arg_list_tmp <- arg_list
-  arg_list_tmp$control$max_it_fixed_params <- 5
-  suppressWarnings(res2 <- do.call(ddhazard, arg_list_tmp))
+  ctrl <- eval(cl$control)
+  ctrl$max_it_fixed_params <- 5
+  cl_tmp$control <- ctrl
+  suppressWarnings(res2 <- eval(cl_tmp))
   expect_true(!all(res2$fixed_effects == res1$fixed_effects))
 })
 
@@ -124,7 +128,7 @@ test_that("Gets previous results with exponential model with some fixed terms", 
 
   res1 <- ddhazard(
     form, data = sims$res, model = "exponential", by = 1,
-    id = sims$res$id, max_T = 10, control = list(
+    id = sims$res$id, max_T = 10, control = ddhazard_control(
       eps_fixed_parems = 1e-12, fixed_effect_chunk_size = 1e3,
       save_risk_set = F, save_data = F, n_max = 1e2,
       fixed_terms_method = "M_step"),
@@ -147,9 +151,10 @@ test_that("UKF with fixed effects works", {
               ddFixed_intercept() + ddFixed(x1) + x2 + x3),
     Q = diag(1, 2), Q_0 = diag(10, 2),
     data = sims$res, model = "logit", by = 1, id = sims$res$id, max_T = 10,
-    control = list(method = "UKF", fixed_parems_start = rep(0, 2),
-                   save_data = F, save_risk_set = F,
-                   fixed_terms_method = "M_step"))
+    control = ddhazard_control(
+      method = "UKF", fixed_parems_start = rep(0, 2),
+      save_data = F, save_risk_set = F,
+      fixed_terms_method = "M_step"))
 
   # matplot(sims$betas, type = "l", lty = 1)
   # matplot(fit$state_vecs, type = "l", lty = 2, col = 3:4, add = T)
@@ -165,8 +170,8 @@ test_that("UKF with fixed effects works", {
                   Q = diag(.1, 2), Q_0 = diag(10, 2),
                   data = sims$res, model = "exponential",
                   by = 1, id = sims$res$id, max_T = 10,
-                  control = list(method = "UKF",
-                                 fixed_terms_method = "M_step"))
+                  control = ddhazard_control(
+                    method = "UKF", fixed_terms_method = "M_step"))
 
 
   # matplot(sims$betas, type = "l", lty = 1)
@@ -186,8 +191,9 @@ test_that("posterior_approx gives previous found values with fixed effects in M-
     Surv(tstart, tstop, death == 2) ~ ddFixed(age) + ddFixed(edema) +
       log(albumin) + log(protime) + log(bili), pbc2,
      id = pbc2$id, by = 100, max_T = 3600,
-     control = list(method = "SMA",  fixed_terms_method = "M_step",
-                    eps_fixed_parems = 1e-4),
+     control = ddhazard_control(
+       method = "SMA",  fixed_terms_method = "M_step",
+       eps_fixed_parems = 1e-4),
      Q_0 = diag(rep(100000, 4)), Q = diag(rep(1e-3, 4))))
 
   # plot(f1)
@@ -211,8 +217,9 @@ test_that("Only fixed effects yields same results as bigglm and static_glm with 
 
   suppressWarnings(res1 <- ddhazard(
     form, data = sims$res, model = "exponential", by = 1,
-    control = list(eps_fixed_parems = 1e-4, fixed_effect_chunk_size = 1e3,
-                   fixed_terms_method = "M_step"),
+    control = ddhazard_control(
+      eps_fixed_parems = 1e-4, fixed_effect_chunk_size = 1e3,
+      fixed_terms_method = "M_step"),
     weights = sims$res$ws,  id = sims$res$id, max_T = 10))
 
   tmp_design <- get_survival_case_weights_and_data(

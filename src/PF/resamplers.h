@@ -27,7 +27,6 @@ protected:
     }
 
     if(ESS < data.forward_backward_ESS_threshold){
-
       if(data.debug > 1){
         data.log(2) << "ESS of re-sampling weights is below threshold (" << ESS << " < "
                     << data.forward_backward_ESS_threshold << "). Re-sampling";
@@ -72,11 +71,11 @@ protected:
  in the forward particle filter.
 */
 
-template<typename densities, bool is_forward>
+template<bool is_forward>
 class None_AUX_resampler : private resampler_base<systematic_resampling> {
 public:
   inline static nothing resampler(
-      densities &dens_cal, const PF_data &data, cloud &PF_cloud,
+      pf_base_dens &dens_calc, const PF_data &data, cloud &PF_cloud,
       unsigned int t, arma::uvec &outcome, bool &did_resample){
     /* Compute effective sample size (ESS) */
     arma::vec weights(PF_cloud.size());
@@ -103,53 +102,46 @@ public:
     algorithm with linear computational cost. Biometrika, 97(2), 447-464.
 */
 
-template<typename densities, bool is_forward>
+template<bool is_forward>
 class AUX_resampler_normal_approx_w_cloud_mean : private resampler_base<systematic_resampling> {
 public:
   inline static input_for_normal_apprx_w_cloud_mean resampler(
-      densities &dens_cal, const PF_data &data, cloud &PF_cloud,
+      pf_base_dens &dens_calc, const PF_data &data, cloud &PF_cloud,
       unsigned int t, arma::uvec &outcome, bool &did_resample){
     /* Find weighted mean estimate */
-    arma::vec alpha_bar = PF_cloud.get_weigthed_mean();
+    arma::vec parent = PF_cloud.get_weigthed_mean();
 
     /* compute means and covariances */
-    auto &Q = data.Q_proposal;
-    auto ans = compute_mu_n_Sigma_from_normal_apprx_w_cloud_mean
-      <densities, is_forward>
-      (dens_cal, data, t, Q, alpha_bar, PF_cloud);
+    auto ans = taylor_normal_approx_w_cloud_mean
+      (dens_calc, data, t, data.Q, parent, PF_cloud, is_forward);
 
     /* Compute sampling weights */
     double max_weight =  -std::numeric_limits<double>::max();
     unsigned int n_elem = PF_cloud.size();
     arma::uvec r_set = get_risk_set(data, t);
-#ifdef _OPENMP
-#pragma omp parallel
-{
-#endif
-    double my_max_weight = -std::numeric_limits<double>::max();
 
 #ifdef _OPENMP
-#pragma omp for schedule(static)
+#pragma omp parallel for schedule(static) reduction(max:max_weight)
 #endif
     for(unsigned int i = 0; i < n_elem; ++i){ // loop over cloud elements
       auto it_cl = PF_cloud.begin() + i;
       auto it_mu_j = ans.mu_js.begin() + i;
+      auto it_xi_j = ans.xi_js.begin() + i;
 
       double log_prob_y_given_state =
-        densities::log_prob_y_given_state(
-          data, data.err_state->map(*it_mu_j).sv, t, r_set, false);
+        dens_calc.log_prob_y_given_state(*it_mu_j, t, r_set, false);
       double log_prop_transition;
       if(is_forward){
+        const arma::vec mean = data.state_trans->map(it_cl->get_state()).sv;
         log_prop_transition = dmvnrm_log(
-          *it_mu_j,
-          data.err_state_inv->map(it_cl->get_state()).sv,
-          data.Q.chol_inv);
+          *it_xi_j,
+          data.err_state_inv->map(mean).sv,
+          data.Q.chol_inv());
 
       } else {
-        arma::vec mean = data.bw_mean(t, it_cl->get_state());
+        const arma::vec mean = data.bw_mean(t, it_cl->get_state());
         log_prop_transition = dmvnrm_log(
-          *it_mu_j, data.err_state_inv->map(mean).sv,
-          data.bw_covar(t).chol_inv);
+          *it_mu_j, mean, data.bw_covar(t).chol_inv());
 
       }
 
@@ -161,18 +153,8 @@ public:
         it_cl->log_weight + log_prop_transition + log_prob_y_given_state
         - log_prop_proposal;
 
-      my_max_weight = MAX(it_cl->log_resampling_weight, my_max_weight);
+      max_weight = MAX(max_weight, it_cl->log_resampling_weight);
     } // end loop over cloud elements
-
-#ifdef _OPENMP
-#pragma omp critical(aux_resampler_normal_approx_w_cloud_mean_lock)
-{
-#endif
-    max_weight = MAX(my_max_weight, max_weight);
-#ifdef _OPENMP
-}
-} // end omp parallel
-#endif
 
     auto norm_out =
       normalize_log_resampling_weight
@@ -191,52 +173,44 @@ public:
     algorithm with linear computational cost. Biometrika, 97(2), 447-464.
 */
 
-template<typename densities, bool is_forward>
+template<bool is_forward>
 class AUX_resampler_normal_approx_w_particles : private resampler_base<systematic_resampling> {
 public:
   inline static input_for_normal_apprx_w_particle_mean resampler(
-      densities &dens_cal, const PF_data &data, cloud &PF_cloud,
+      pf_base_dens &dens_calc, const PF_data &data, cloud &PF_cloud,
       unsigned int t, arma::uvec &outcome, bool &did_resample){
     /* compute means and covariances */
-    auto &Q = data.Q_proposal;
-    auto ans = compute_mu_n_Sigma_from_normal_apprx_w_particles
-      <densities, is_forward>
-      (dens_cal, data, t, Q, PF_cloud);
+    auto ans = taylor_normal_approx_w_particles
+      (dens_calc, data, t, data.Q, PF_cloud, is_forward);
 
     /* Compute sampling weights */
     double max_weight =  -std::numeric_limits<double>::max();
 
     unsigned int n_elem = PF_cloud.size();
     arma::uvec r_set = get_risk_set(data, t);
-#ifdef _OPENMP
-#pragma omp parallel
-{
-#endif
-    double my_max_weight = -std::numeric_limits<double>::max();
 
 #ifdef _OPENMP
-#pragma omp for schedule(static)
+#pragma omp parallel for schedule(static) reduction(max:max_weight)
 #endif
     for(unsigned int i = 0; i < n_elem; ++i){ // loop over cloud elements
       auto it_cl = &PF_cloud[i];
       auto it_ans = &ans[i];
 
-      double log_prob_y_given_state = densities::log_prob_y_given_state(
-        data, data.err_state->map(it_ans->mu).sv, t, r_set, false);
+      double log_prob_y_given_state = dens_calc.log_prob_y_given_state(
+        it_ans->mu, t, r_set, false);
 
       double log_prop_transition;
       if(is_forward){
         log_prop_transition = dmvnrm_log(
-          it_ans->mu,
+          it_ans->xi,
           // will failed if there are fixed effects in the state vector
           data.err_state_inv->map(it_cl->get_state()).sv,
-          data.Q.chol_inv);
+          data.Q.chol_inv());
 
       } else {
-        arma::vec mean = data.bw_mean(t, it_cl->get_state());
+        const arma::vec mean = data.bw_mean(t, it_cl->get_state());
         log_prop_transition = dmvnrm_log(
-          it_ans->mu, data.err_state_inv->map(mean).sv,
-          data.bw_covar(t).chol_inv);
+          it_ans->mu, mean, data.bw_covar(t).chol_inv());
 
       }
 
@@ -248,18 +222,8 @@ public:
       it_cl->log_weight + log_prop_transition + log_prob_y_given_state
         - log_prop_proposal;
 
-      my_max_weight = MAX(it_cl->log_resampling_weight, my_max_weight);
+      max_weight = MAX(it_cl->log_resampling_weight, max_weight);
     } // end loop over cloud elements
-
-#ifdef _OPENMP
-#pragma omp critical(aux_resampler_normal_approx_w_particles_lock)
-{
-#endif
-    max_weight = MAX(my_max_weight, max_weight);
-#ifdef _OPENMP
-}
-} // end omp parallel
-#endif
 
     auto norm_out = normalize_log_resampling_weight<true, true>(PF_cloud, max_weight);
     outcome = sample(data, norm_out.weights, norm_out.ESS, did_resample);

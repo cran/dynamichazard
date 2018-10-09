@@ -23,8 +23,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // ddhazard_fit_cpp
-Rcpp::List ddhazard_fit_cpp(arma::mat& X, arma::mat& fixed_terms, const arma::vec& weights, const arma::vec& tstart, const arma::vec& tstop, const arma::colvec& a_0, const arma::vec& fixed_parems_start, arma::mat R, arma::mat L, arma::vec m, arma::mat Q_0, arma::mat Q, const Rcpp::List& risk_obj, const arma::mat& F_, const double eps_fixed_parems, const int max_it_fixed_params, const arma::uword n_max, const double eps, const arma::uword verbose, const bool est_Q_0, const std::string method, Rcpp::Nullable<Rcpp::NumericVector> kappa, Rcpp::Nullable<Rcpp::NumericVector> alpha, Rcpp::Nullable<Rcpp::NumericVector> beta, Rcpp::Nullable<Rcpp::NumericVector> NR_eps, Rcpp::Nullable<Rcpp::NumericVector> LR, const std::string model, const std::string M_step_formulation, const int fixed_effect_chunk_size, const bool debug, const unsigned int NR_it_max, const int n_threads, const double denom_term, const int n_fixed_terms_in_state_vec, const bool use_pinv, const std::string criteria, const std::string posterior_version, const unsigned int GMA_max_rep, const double GMA_NR_eps, const int EKF_batch_size);
-RcppExport SEXP _dynamichazard_ddhazard_fit_cpp(SEXP XSEXP, SEXP fixed_termsSEXP, SEXP weightsSEXP, SEXP tstartSEXP, SEXP tstopSEXP, SEXP a_0SEXP, SEXP fixed_parems_startSEXP, SEXP RSEXP, SEXP LSEXP, SEXP mSEXP, SEXP Q_0SEXP, SEXP QSEXP, SEXP risk_objSEXP, SEXP F_SEXP, SEXP eps_fixed_paremsSEXP, SEXP max_it_fixed_paramsSEXP, SEXP n_maxSEXP, SEXP epsSEXP, SEXP verboseSEXP, SEXP est_Q_0SEXP, SEXP methodSEXP, SEXP kappaSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP NR_epsSEXP, SEXP LRSEXP, SEXP modelSEXP, SEXP M_step_formulationSEXP, SEXP fixed_effect_chunk_sizeSEXP, SEXP debugSEXP, SEXP NR_it_maxSEXP, SEXP n_threadsSEXP, SEXP denom_termSEXP, SEXP n_fixed_terms_in_state_vecSEXP, SEXP use_pinvSEXP, SEXP criteriaSEXP, SEXP posterior_versionSEXP, SEXP GMA_max_repSEXP, SEXP GMA_NR_epsSEXP, SEXP EKF_batch_sizeSEXP) {
+Rcpp::List ddhazard_fit_cpp(arma::mat& X, arma::mat& fixed_terms, const arma::vec& weights, const arma::vec& tstart, const arma::vec& tstop, const arma::colvec& a_0, const arma::vec& fixed_parems_start, arma::mat R, arma::mat L, arma::mat Q_0, arma::mat Q, const Rcpp::List& risk_obj, const arma::mat& F_, const double eps_fixed_parems, const int max_it_fixed_params, const arma::uword n_max, const double eps, const arma::uword verbose, const bool est_Q_0, const std::string method, Rcpp::Nullable<Rcpp::NumericVector> kappa, Rcpp::Nullable<Rcpp::NumericVector> alpha, Rcpp::Nullable<Rcpp::NumericVector> beta, Rcpp::Nullable<Rcpp::NumericVector> NR_eps, Rcpp::Nullable<Rcpp::NumericVector> LR, const std::string model, const std::string M_step_formulation, const int fixed_effect_chunk_size, const bool debug, const unsigned int NR_it_max, const int n_threads, const double denom_term, const int n_fixed_terms_in_state_vec, const bool use_pinv, const std::string criteria, const std::string posterior_version, const unsigned int GMA_max_rep, const double GMA_NR_eps, const int EKF_batch_size, const bool est_a_0);
+RcppExport SEXP _dynamichazard_ddhazard_fit_cpp(SEXP XSEXP, SEXP fixed_termsSEXP, SEXP weightsSEXP, SEXP tstartSEXP, SEXP tstopSEXP, SEXP a_0SEXP, SEXP fixed_parems_startSEXP, SEXP RSEXP, SEXP LSEXP, SEXP Q_0SEXP, SEXP QSEXP, SEXP risk_objSEXP, SEXP F_SEXP, SEXP eps_fixed_paremsSEXP, SEXP max_it_fixed_paramsSEXP, SEXP n_maxSEXP, SEXP epsSEXP, SEXP verboseSEXP, SEXP est_Q_0SEXP, SEXP methodSEXP, SEXP kappaSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP NR_epsSEXP, SEXP LRSEXP, SEXP modelSEXP, SEXP M_step_formulationSEXP, SEXP fixed_effect_chunk_sizeSEXP, SEXP debugSEXP, SEXP NR_it_maxSEXP, SEXP n_threadsSEXP, SEXP denom_termSEXP, SEXP n_fixed_terms_in_state_vecSEXP, SEXP use_pinvSEXP, SEXP criteriaSEXP, SEXP posterior_versionSEXP, SEXP GMA_max_repSEXP, SEXP GMA_NR_epsSEXP, SEXP EKF_batch_sizeSEXP, SEXP est_a_0SEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -37,7 +37,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const arma::vec& >::type fixed_parems_start(fixed_parems_startSEXP);
     Rcpp::traits::input_parameter< arma::mat >::type R(RSEXP);
     Rcpp::traits::input_parameter< arma::mat >::type L(LSEXP);
-    Rcpp::traits::input_parameter< arma::vec >::type m(mSEXP);
     Rcpp::traits::input_parameter< arma::mat >::type Q_0(Q_0SEXP);
     Rcpp::traits::input_parameter< arma::mat >::type Q(QSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List& >::type risk_obj(risk_objSEXP);
@@ -68,7 +67,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const unsigned int >::type GMA_max_rep(GMA_max_repSEXP);
     Rcpp::traits::input_parameter< const double >::type GMA_NR_eps(GMA_NR_epsSEXP);
     Rcpp::traits::input_parameter< const int >::type EKF_batch_size(EKF_batch_sizeSEXP);
-    rcpp_result_gen = Rcpp::wrap(ddhazard_fit_cpp(X, fixed_terms, weights, tstart, tstop, a_0, fixed_parems_start, R, L, m, Q_0, Q, risk_obj, F_, eps_fixed_parems, max_it_fixed_params, n_max, eps, verbose, est_Q_0, method, kappa, alpha, beta, NR_eps, LR, model, M_step_formulation, fixed_effect_chunk_size, debug, NR_it_max, n_threads, denom_term, n_fixed_terms_in_state_vec, use_pinv, criteria, posterior_version, GMA_max_rep, GMA_NR_eps, EKF_batch_size));
+    Rcpp::traits::input_parameter< const bool >::type est_a_0(est_a_0SEXP);
+    rcpp_result_gen = Rcpp::wrap(ddhazard_fit_cpp(X, fixed_terms, weights, tstart, tstop, a_0, fixed_parems_start, R, L, Q_0, Q, risk_obj, F_, eps_fixed_parems, max_it_fixed_params, n_max, eps, verbose, est_Q_0, method, kappa, alpha, beta, NR_eps, LR, model, M_step_formulation, fixed_effect_chunk_size, debug, NR_it_max, n_threads, denom_term, n_fixed_terms_in_state_vec, use_pinv, criteria, posterior_version, GMA_max_rep, GMA_NR_eps, EKF_batch_size, est_a_0));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -446,8 +446,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // PF_smooth
-Rcpp::List PF_smooth(const int n_fixed_terms_in_state_vec, arma::mat& X, arma::mat& fixed_terms, const arma::vec& tstart, const arma::vec& tstop, const arma::colvec& a_0, const arma::mat& R, const arma::mat& L, const arma::vec& m, arma::mat& Q_0, arma::mat& Q, const arma::mat Q_tilde, const Rcpp::List& risk_obj, const arma::mat& F, const int n_max, const int n_threads, const arma::vec& fixed_parems, const int N_fw_n_bw, const int N_smooth, Rcpp::Nullable<Rcpp::NumericVector> forward_backward_ESS_threshold, const int debug, const int N_first, /* non-common arguments */     const std::string method, const std::string smoother, const std::string model);
-RcppExport SEXP _dynamichazard_PF_smooth(SEXP n_fixed_terms_in_state_vecSEXP, SEXP XSEXP, SEXP fixed_termsSEXP, SEXP tstartSEXP, SEXP tstopSEXP, SEXP a_0SEXP, SEXP RSEXP, SEXP LSEXP, SEXP mSEXP, SEXP Q_0SEXP, SEXP QSEXP, SEXP Q_tildeSEXP, SEXP risk_objSEXP, SEXP FSEXP, SEXP n_maxSEXP, SEXP n_threadsSEXP, SEXP fixed_paremsSEXP, SEXP N_fw_n_bwSEXP, SEXP N_smoothSEXP, SEXP forward_backward_ESS_thresholdSEXP, SEXP debugSEXP, SEXP N_firstSEXP, SEXP methodSEXP, SEXP smootherSEXP, SEXP modelSEXP) {
+Rcpp::List PF_smooth(const int n_fixed_terms_in_state_vec, arma::mat& X, arma::mat& fixed_terms, const arma::vec& tstart, const arma::vec& tstop, const arma::colvec& a_0, const arma::mat& R, arma::mat& Q_0, arma::mat& Q, const arma::mat Q_tilde, const Rcpp::List& risk_obj, const arma::mat& F, const int n_max, const int n_threads, const arma::vec& fixed_parems, const int N_fw_n_bw, const int N_smooth, Rcpp::Nullable<Rcpp::NumericVector> forward_backward_ESS_threshold, const int debug, const int N_first, std::string type, /* non-common arguments */     const std::string method, const std::string smoother, const std::string model);
+RcppExport SEXP _dynamichazard_PF_smooth(SEXP n_fixed_terms_in_state_vecSEXP, SEXP XSEXP, SEXP fixed_termsSEXP, SEXP tstartSEXP, SEXP tstopSEXP, SEXP a_0SEXP, SEXP RSEXP, SEXP Q_0SEXP, SEXP QSEXP, SEXP Q_tildeSEXP, SEXP risk_objSEXP, SEXP FSEXP, SEXP n_maxSEXP, SEXP n_threadsSEXP, SEXP fixed_paremsSEXP, SEXP N_fw_n_bwSEXP, SEXP N_smoothSEXP, SEXP forward_backward_ESS_thresholdSEXP, SEXP debugSEXP, SEXP N_firstSEXP, SEXP typeSEXP, SEXP methodSEXP, SEXP smootherSEXP, SEXP modelSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -458,8 +458,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const arma::vec& >::type tstop(tstopSEXP);
     Rcpp::traits::input_parameter< const arma::colvec& >::type a_0(a_0SEXP);
     Rcpp::traits::input_parameter< const arma::mat& >::type R(RSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type L(LSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type m(mSEXP);
     Rcpp::traits::input_parameter< arma::mat& >::type Q_0(Q_0SEXP);
     Rcpp::traits::input_parameter< arma::mat& >::type Q(QSEXP);
     Rcpp::traits::input_parameter< const arma::mat >::type Q_tilde(Q_tildeSEXP);
@@ -473,16 +471,17 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type forward_backward_ESS_threshold(forward_backward_ESS_thresholdSEXP);
     Rcpp::traits::input_parameter< const int >::type debug(debugSEXP);
     Rcpp::traits::input_parameter< const int >::type N_first(N_firstSEXP);
+    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
     Rcpp::traits::input_parameter< /* non-common arguments */     const std::string >::type method(methodSEXP);
     Rcpp::traits::input_parameter< const std::string >::type smoother(smootherSEXP);
     Rcpp::traits::input_parameter< const std::string >::type model(modelSEXP);
-    rcpp_result_gen = Rcpp::wrap(PF_smooth(n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, L, m, Q_0, Q, Q_tilde, risk_obj, F, n_max, n_threads, fixed_parems, N_fw_n_bw, N_smooth, forward_backward_ESS_threshold, debug, N_first, method, smoother, model));
+    rcpp_result_gen = Rcpp::wrap(PF_smooth(n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, Q_0, Q, Q_tilde, risk_obj, F, n_max, n_threads, fixed_parems, N_fw_n_bw, N_smooth, forward_backward_ESS_threshold, debug, N_first, type, method, smoother, model));
     return rcpp_result_gen;
 END_RCPP
 }
 // particle_filter
-Rcpp::List particle_filter(const int n_fixed_terms_in_state_vec, arma::mat& X, arma::mat& fixed_terms, const arma::vec& tstart, const arma::vec& tstop, const arma::colvec& a_0, const arma::mat& R, const arma::mat& L, const arma::vec& m, arma::mat& Q_0, arma::mat& Q, const arma::mat Q_tilde, const Rcpp::List& risk_obj, const arma::mat& F, const int n_max, const int n_threads, const arma::vec& fixed_parems, const int N_fw_n_bw, const int N_smooth, Rcpp::Nullable<Rcpp::NumericVector> forward_backward_ESS_threshold, const int debug, const int N_first, /* non-common arguments */     const bool is_forward, const std::string method, const std::string model);
-RcppExport SEXP _dynamichazard_particle_filter(SEXP n_fixed_terms_in_state_vecSEXP, SEXP XSEXP, SEXP fixed_termsSEXP, SEXP tstartSEXP, SEXP tstopSEXP, SEXP a_0SEXP, SEXP RSEXP, SEXP LSEXP, SEXP mSEXP, SEXP Q_0SEXP, SEXP QSEXP, SEXP Q_tildeSEXP, SEXP risk_objSEXP, SEXP FSEXP, SEXP n_maxSEXP, SEXP n_threadsSEXP, SEXP fixed_paremsSEXP, SEXP N_fw_n_bwSEXP, SEXP N_smoothSEXP, SEXP forward_backward_ESS_thresholdSEXP, SEXP debugSEXP, SEXP N_firstSEXP, SEXP is_forwardSEXP, SEXP methodSEXP, SEXP modelSEXP) {
+Rcpp::List particle_filter(const int n_fixed_terms_in_state_vec, arma::mat& X, arma::mat& fixed_terms, const arma::vec& tstart, const arma::vec& tstop, const arma::colvec& a_0, const arma::mat& R, arma::mat& Q_0, arma::mat& Q, const arma::mat Q_tilde, const Rcpp::List& risk_obj, const arma::mat& F, const int n_threads, const arma::vec& fixed_parems, const int N_fw_n_bw, Rcpp::Nullable<Rcpp::NumericVector> forward_backward_ESS_threshold, const int debug, const int N_first, std::string type, const bool is_forward, const std::string method, const std::string model);
+RcppExport SEXP _dynamichazard_particle_filter(SEXP n_fixed_terms_in_state_vecSEXP, SEXP XSEXP, SEXP fixed_termsSEXP, SEXP tstartSEXP, SEXP tstopSEXP, SEXP a_0SEXP, SEXP RSEXP, SEXP Q_0SEXP, SEXP QSEXP, SEXP Q_tildeSEXP, SEXP risk_objSEXP, SEXP FSEXP, SEXP n_threadsSEXP, SEXP fixed_paremsSEXP, SEXP N_fw_n_bwSEXP, SEXP forward_backward_ESS_thresholdSEXP, SEXP debugSEXP, SEXP N_firstSEXP, SEXP typeSEXP, SEXP is_forwardSEXP, SEXP methodSEXP, SEXP modelSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -493,31 +492,28 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const arma::vec& >::type tstop(tstopSEXP);
     Rcpp::traits::input_parameter< const arma::colvec& >::type a_0(a_0SEXP);
     Rcpp::traits::input_parameter< const arma::mat& >::type R(RSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type L(LSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type m(mSEXP);
     Rcpp::traits::input_parameter< arma::mat& >::type Q_0(Q_0SEXP);
     Rcpp::traits::input_parameter< arma::mat& >::type Q(QSEXP);
     Rcpp::traits::input_parameter< const arma::mat >::type Q_tilde(Q_tildeSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List& >::type risk_obj(risk_objSEXP);
     Rcpp::traits::input_parameter< const arma::mat& >::type F(FSEXP);
-    Rcpp::traits::input_parameter< const int >::type n_max(n_maxSEXP);
     Rcpp::traits::input_parameter< const int >::type n_threads(n_threadsSEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type fixed_parems(fixed_paremsSEXP);
     Rcpp::traits::input_parameter< const int >::type N_fw_n_bw(N_fw_n_bwSEXP);
-    Rcpp::traits::input_parameter< const int >::type N_smooth(N_smoothSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type forward_backward_ESS_threshold(forward_backward_ESS_thresholdSEXP);
     Rcpp::traits::input_parameter< const int >::type debug(debugSEXP);
     Rcpp::traits::input_parameter< const int >::type N_first(N_firstSEXP);
-    Rcpp::traits::input_parameter< /* non-common arguments */     const bool >::type is_forward(is_forwardSEXP);
+    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
+    Rcpp::traits::input_parameter< const bool >::type is_forward(is_forwardSEXP);
     Rcpp::traits::input_parameter< const std::string >::type method(methodSEXP);
     Rcpp::traits::input_parameter< const std::string >::type model(modelSEXP);
-    rcpp_result_gen = Rcpp::wrap(particle_filter(n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, L, m, Q_0, Q, Q_tilde, risk_obj, F, n_max, n_threads, fixed_parems, N_fw_n_bw, N_smooth, forward_backward_ESS_threshold, debug, N_first, is_forward, method, model));
+    rcpp_result_gen = Rcpp::wrap(particle_filter(n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, Q_0, Q, Q_tilde, risk_obj, F, n_threads, fixed_parems, N_fw_n_bw, forward_backward_ESS_threshold, debug, N_first, type, is_forward, method, model));
     return rcpp_result_gen;
 END_RCPP
 }
-// compute_summary_stats_first_o_RW
-Rcpp::List compute_summary_stats_first_o_RW(const Rcpp::List& rcpp_list, unsigned int n_threads, const arma::vec& a_0, const arma::mat& Q, const arma::mat& Q_0);
-RcppExport SEXP _dynamichazard_compute_summary_stats_first_o_RW(SEXP rcpp_listSEXP, SEXP n_threadsSEXP, SEXP a_0SEXP, SEXP QSEXP, SEXP Q_0SEXP) {
+// compute_PF_summary_stats
+Rcpp::List compute_PF_summary_stats(const Rcpp::List& rcpp_list, unsigned int n_threads, const arma::vec& a_0, const arma::mat& Q, const arma::mat& Q_0, const arma::mat& R, const bool debug, const arma::mat F, const bool do_use_F, const bool do_compute_E_x);
+RcppExport SEXP _dynamichazard_compute_PF_summary_stats(SEXP rcpp_listSEXP, SEXP n_threadsSEXP, SEXP a_0SEXP, SEXP QSEXP, SEXP Q_0SEXP, SEXP RSEXP, SEXP debugSEXP, SEXP FSEXP, SEXP do_use_FSEXP, SEXP do_compute_E_xSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -526,7 +522,31 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const arma::vec& >::type a_0(a_0SEXP);
     Rcpp::traits::input_parameter< const arma::mat& >::type Q(QSEXP);
     Rcpp::traits::input_parameter< const arma::mat& >::type Q_0(Q_0SEXP);
-    rcpp_result_gen = Rcpp::wrap(compute_summary_stats_first_o_RW(rcpp_list, n_threads, a_0, Q, Q_0));
+    Rcpp::traits::input_parameter< const arma::mat& >::type R(RSEXP);
+    Rcpp::traits::input_parameter< const bool >::type debug(debugSEXP);
+    Rcpp::traits::input_parameter< const arma::mat >::type F(FSEXP);
+    Rcpp::traits::input_parameter< const bool >::type do_use_F(do_use_FSEXP);
+    Rcpp::traits::input_parameter< const bool >::type do_compute_E_x(do_compute_E_xSEXP);
+    rcpp_result_gen = Rcpp::wrap(compute_PF_summary_stats(rcpp_list, n_threads, a_0, Q, Q_0, R, debug, F, do_use_F, do_compute_E_x));
+    return rcpp_result_gen;
+END_RCPP
+}
+// PF_est_params_dens
+Rcpp::List PF_est_params_dens(const Rcpp::List& rcpp_list, unsigned int n_threads, const arma::vec& a_0, const arma::mat& Q, const arma::mat& Q_0, const arma::mat& R, const bool debug, const bool do_est_a_0, const bool only_QR);
+RcppExport SEXP _dynamichazard_PF_est_params_dens(SEXP rcpp_listSEXP, SEXP n_threadsSEXP, SEXP a_0SEXP, SEXP QSEXP, SEXP Q_0SEXP, SEXP RSEXP, SEXP debugSEXP, SEXP do_est_a_0SEXP, SEXP only_QRSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type rcpp_list(rcpp_listSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type n_threads(n_threadsSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type a_0(a_0SEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Q(QSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Q_0(Q_0SEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type R(RSEXP);
+    Rcpp::traits::input_parameter< const bool >::type debug(debugSEXP);
+    Rcpp::traits::input_parameter< const bool >::type do_est_a_0(do_est_a_0SEXP);
+    Rcpp::traits::input_parameter< const bool >::type only_QR(only_QRSEXP);
+    rcpp_result_gen = Rcpp::wrap(PF_est_params_dens(rcpp_list, n_threads, a_0, Q, Q_0, R, debug, do_est_a_0, only_QR));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -554,23 +574,25 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// pf_fixed_effect_iteration
-Rcpp::List pf_fixed_effect_iteration(const arma::mat& X, const arma::vec& Y, const arma::vec& dts, const arma::mat& cloud, const arma::vec& cl_weights, const arma::mat& ran_vars, const arma::vec& beta, std::string family, int max_threads, const unsigned int max_bytes);
-RcppExport SEXP _dynamichazard_pf_fixed_effect_iteration(SEXP XSEXP, SEXP YSEXP, SEXP dtsSEXP, SEXP cloudSEXP, SEXP cl_weightsSEXP, SEXP ran_varsSEXP, SEXP betaSEXP, SEXP familySEXP, SEXP max_threadsSEXP, SEXP max_bytesSEXP) {
+// pf_fixed_effect_get_QR
+Rcpp::List pf_fixed_effect_get_QR(Rcpp::List clouds, Rcpp::List risk_obj, const arma::mat& ran_vars, const arma::mat& fixed_terms, const arma::mat& R_top, const arma::vec& tstart, const arma::vec& tstop, const arma::vec& fixed_parems, const std::string family, const int max_threads, const bool debug, const unsigned int max_bytes);
+RcppExport SEXP _dynamichazard_pf_fixed_effect_get_QR(SEXP cloudsSEXP, SEXP risk_objSEXP, SEXP ran_varsSEXP, SEXP fixed_termsSEXP, SEXP R_topSEXP, SEXP tstartSEXP, SEXP tstopSEXP, SEXP fixed_paremsSEXP, SEXP familySEXP, SEXP max_threadsSEXP, SEXP debugSEXP, SEXP max_bytesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type Y(YSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type dts(dtsSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type cloud(cloudSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type cl_weights(cl_weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type clouds(cloudsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type risk_obj(risk_objSEXP);
     Rcpp::traits::input_parameter< const arma::mat& >::type ran_vars(ran_varsSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type beta(betaSEXP);
-    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
-    Rcpp::traits::input_parameter< int >::type max_threads(max_threadsSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type fixed_terms(fixed_termsSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type R_top(R_topSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type tstart(tstartSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type tstop(tstopSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type fixed_parems(fixed_paremsSEXP);
+    Rcpp::traits::input_parameter< const std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< const int >::type max_threads(max_threadsSEXP);
+    Rcpp::traits::input_parameter< const bool >::type debug(debugSEXP);
     Rcpp::traits::input_parameter< const unsigned int >::type max_bytes(max_bytesSEXP);
-    rcpp_result_gen = Rcpp::wrap(pf_fixed_effect_iteration(X, Y, dts, cloud, cl_weights, ran_vars, beta, family, max_threads, max_bytes));
+    rcpp_result_gen = Rcpp::wrap(pf_fixed_effect_get_QR(clouds, risk_obj, ran_vars, fixed_terms, R_top, tstart, tstop, fixed_parems, family, max_threads, debug, max_bytes));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -655,12 +677,13 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dynamichazard_linear_mapper_test", (DL_FUNC) &_dynamichazard_linear_mapper_test, 7},
     {"_dynamichazard_logLike_cpp", (DL_FUNC) &_dynamichazard_logLike_cpp, 11},
     {"_dynamichazard_parallelglm", (DL_FUNC) &_dynamichazard_parallelglm, 11},
-    {"_dynamichazard_PF_smooth", (DL_FUNC) &_dynamichazard_PF_smooth, 25},
-    {"_dynamichazard_particle_filter", (DL_FUNC) &_dynamichazard_particle_filter, 25},
-    {"_dynamichazard_compute_summary_stats_first_o_RW", (DL_FUNC) &_dynamichazard_compute_summary_stats_first_o_RW, 5},
+    {"_dynamichazard_PF_smooth", (DL_FUNC) &_dynamichazard_PF_smooth, 24},
+    {"_dynamichazard_particle_filter", (DL_FUNC) &_dynamichazard_particle_filter, 22},
+    {"_dynamichazard_compute_PF_summary_stats", (DL_FUNC) &_dynamichazard_compute_PF_summary_stats, 10},
+    {"_dynamichazard_PF_est_params_dens", (DL_FUNC) &_dynamichazard_PF_est_params_dens, 9},
     {"_dynamichazard_test_copy_mat", (DL_FUNC) &_dynamichazard_test_copy_mat, 2},
     {"_dynamichazard_test_copy_vec", (DL_FUNC) &_dynamichazard_test_copy_vec, 2},
-    {"_dynamichazard_pf_fixed_effect_iteration", (DL_FUNC) &_dynamichazard_pf_fixed_effect_iteration, 10},
+    {"_dynamichazard_pf_fixed_effect_get_QR", (DL_FUNC) &_dynamichazard_pf_fixed_effect_get_QR, 12},
     {"_dynamichazard_get_risk_obj_rcpp", (DL_FUNC) &_dynamichazard_get_risk_obj_rcpp, 11},
     {"_dynamichazard_round_if_almost_eq", (DL_FUNC) &_dynamichazard_round_if_almost_eq, 3},
     {"_dynamichazard_rep_vec", (DL_FUNC) &_dynamichazard_rep_vec, 2},

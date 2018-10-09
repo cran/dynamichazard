@@ -5,7 +5,7 @@ test_that("ddhazard help page examples gives the same results", {
   fit <- ddhazard(
     Surv(time, status == 2) ~ log(bili), pbc, id = pbc$id, max_T = 3600,
     Q_0 = diag(1, 2), Q = diag(1e-4, 2), by = 50,
-    control = list(method = "GMA"))
+    control = ddhazard_control(method = "GMA"))
 
   # test for plot
   expect_no_error(plot(fit))
@@ -33,7 +33,7 @@ test_that("ddhazard help page examples gives the same results", {
   fit <- ddhazard(
    Surv(time, status == 2) ~ log(bili), pbc, id = pbc$id, max_T = 3600,
    Q_0 = diag(1, 4), Q = diag(1e-4, 2), by = 50,
-   control = list(method = "GMA"),
+   control = ddhazard_control(method = "GMA"),
    order = 2)
   fit <- fit[c("state_vecs", "state_vars", "lag_one_cov")]
   expect_known_value(fit, "ddhazard_help_page_order_two.RDS")
@@ -46,7 +46,7 @@ test_that("residuals.ddhazard help page examples gives the same results", {
   fit <- ddhazard(
     Surv(time, status == 2) ~ log(bili), pbc, id = pbc$id, max_T = 3600,
     Q_0 = diag(1, 2), Q = diag(1e-4, 2), by = 50,
-    control = list(method = "GMA"))
+    control = ddhazard_control(method = "GMA"))
 
   resids <- residuals(fit, type = "pearson")$residuals
   expect_known_value(resids[1:2], "ddhazard_help_page_residuals.RDS")
@@ -57,7 +57,7 @@ test_that("hatvalues.ddhazard help page examples gives the same results", {
   fit <- ddhazard(
     Surv(time, status == 2) ~ log(bili), pbc, id = pbc$id, max_T = 3000,
     Q_0 = diag(1, 2), Q = diag(1e-4, 2), by = 100,
-    control = list(method = "GMA"))
+    control = ddhazard_control(method = "GMA"))
   hvs <- hatvalues(fit)
 
   expect_known_value(hvs[1:2], "hatvalues_help_page.RDS")
@@ -71,7 +71,7 @@ test_that("ddhazard_boot help page examples gives the same results", {
   fit <- ddhazard(
     Surv(time, status == 2) ~ log(bili), pbc, id = pbc$id, max_T = 3000,
     Q_0 = diag(1, 2), Q = diag(1e-4, 2), by = 100,
-    control = list(method = "GMA"))
+    control = ddhazard_control(method = "GMA"))
   bt <- ddhazard_boot(fit, R = 999)
 
   expect_known_value(
@@ -130,31 +130,38 @@ test_that("PF_EM help page example runs and gives previous computed results", {
   skip_on_cran()
 
   .lung <- lung[!is.na(lung$ph.ecog), ]
+  # standardize
+  .lung$age <- scale(.lung$age)
+
+  # fit
   set.seed(43588155)
-  pf_fit <- PF_EM(
-    Surv(time, status == 2) ~ ph.ecog + age,
+  pf_fit <- suppressWarnings(PF_EM(
+    Surv(time, status == 2) ~ ddFixed(ph.ecog) + age,
     data = .lung, by = 50, id = 1:nrow(.lung),
-    Q_0 = diag(1, 3), Q = diag(1, 3),
+    Q_0 = diag(1, 2), Q = diag(.5^2, 2),
     max_T = 800,
     control = PF_control(
-      N_fw_n_bw = 500,
-      N_first = 2500,
-      N_smooth = 2500,
-      n_max = 50,
-      n_threads = max(parallel::detectCores(logical = FALSE), 1)))
+      N_fw_n_bw = 500, N_first = 2500, N_smooth = 5000,
+
+      # take less its than in the man page
+      n_max = 5,
+
+      eps = .001, Q_tilde = diag(.2^2, 2), est_a_0 = FALSE,
+      n_threads = max(parallel::detectCores(logical = FALSE), 1))))
 
   if(dir.exists("previous_results/local_tests"))
+    # tmp <- readRDS("previous_results/local_tests/survival_lung_example.RDS")
     expect_known_value(
       pf_fit[names(pf_fit) != "call"], "local_tests/survival_lung_example.RDS",
       tolerance = 1.49e-08)
 
+  # tmp <- readRDS("previous_results/survival_lung_example_cloud_means.RDS")
   expect_known_value(
     get_means(pf_fit$clouds), "survival_lung_example_cloud_means.RDS",
     tolerance = 1.49e-08)
 
   expect_no_error(plot(pf_fit, cov_index = 1))
   expect_no_error(plot(pf_fit, cov_index = 2))
-  expect_no_error(plot(pf_fit, cov_index = 3))
   expect_no_error(plot(pf_fit$log_likes))
 })
 
@@ -187,26 +194,228 @@ test_that("Second example on PF help page gives the same result", {
       ddFixed(edema) + ddFixed(log_albumin) + ddFixed(log_protime) + log_bili,
     pbc2, Q_0 = 100, Q = 1e-2, by = 100, id = pbc2$id,
     model = "exponential", max_T = 3600,
-    control = list(eps = 1e-5, NR_eps = 1e-4, n_max = 1e4))
+    control = ddhazard_control(eps = 1e-5, NR_eps = 1e-4, n_max = 1e4))
 
-  expect_known_value(ddfit[names(ddfit) != "call"],
+  expect_known_value(ddfit[!names(ddfit) %in% c("call", "control")],
                      "local_tests/pf_man_2nd_ddfit.RDS")
 
   # fit model with particle filter
   set.seed(88235076)
-  ppfit <- suppressWarnings(PF_EM(
+  pf_fit <- suppressWarnings(PF_EM(
     Surv(tstart, tstop, death == 2) ~ ddFixed_intercept() + ddFixed(age) +
       ddFixed(edema) + ddFixed(log_albumin) + ddFixed(log_protime) + log_bili,
-    pbc2, Q_0 = 100, Q = ddfit$Q * 100, # use estimate from before
+    pbc2, Q_0 = 2^2, Q = ddfit$Q * 100, # use estimate from before
     by = 100, id = pbc2$id,
     model = "exponential", max_T = 3600,
     control = PF_control(
-      N_fw_n_bw = 250, N_smooth = 500, N_first = 1000, eps = 1e-3,
-      method = "AUX_normal_approx_w_cloud_mean",
-      n_max = 25, # just take a few iterations as an example
+      N_fw_n_bw = 500, N_smooth = 2500, N_first = 1000, eps = 1e-3,
+      method = "AUX_normal_approx_w_cloud_mean", est_a_0 = FALSE,
+      Q_tilde = as.matrix(.1^2),
+      n_max = 5, # less than in man page
       n_threads = max(parallel::detectCores(logical = FALSE), 1))))
 
-  expect_known_value(ppfit[!names(ppfit) %in%
-                             c("clouds", "call", "summary_stats")],
+  # tmp <- readRDS("previous_results/local_tests/pf_man_2nd_ppfit.RDS")
+  expect_known_value(pf_fit[!names(pf_fit) %in% c("clouds", "call")],
                      "local_tests/pf_man_2nd_ppfit.RDS")
+})
+
+test_that("example in 'PF_EM' with gives previous results w/ a few iterations", {
+  skip_on_cran()
+  skip_if(!dir.exists("previous_results/local_tests"))
+
+  # g groups with k individuals in each
+  g <- 3L
+  k <- 400L
+
+  # matrices for state equation
+  p <- g + 1L
+  G <- matrix(0., p^2, 2L)
+  for(i in 1:p)
+    G[i + (i - 1L) * p, 1L + (i == p)] <- 1L
+
+  theta <- c(.9, .8)
+  F. <- matrix(as.vector(G %*% theta), 4L, 4L)
+
+  J <- matrix(0., ncol = 2L, nrow = p)
+  J[-p, 1L] <- J[p, 2L] <- 1
+  psi <- c(log(c(.3, .1)))
+
+  K <- matrix(0., p * (p - 1L) / 2L, 2L)
+  j <- 0L
+  for(i in (p - 1L):1L){
+    j <- j + i
+    K[j, 2L] <- 1
+  }
+  K[K[, 2L] < 1, 1L] <- 1
+  phi <- log(-(c(.8, .3) + 1) / (c(.8, .3) - 1))
+
+  V <- diag(exp(drop(J %*% psi)))
+  C <- diag(1, ncol(V))
+  C[lower.tri(C)] <- 2/(1 + exp(-drop(K %*% phi))) - 1
+  C[upper.tri(C)] <- t(C)[upper.tri(C)]
+  Q <- V %*% C %*% V     # covariance matrix in state transition
+
+  Q_0 <- get_Q_0(Q, F.)    # invariant covariance matrix
+  beta <- c(rep(-6, g), 0) # all groups have the same long run mean intercept
+
+  # simulate state variables
+  set.seed(56219373)
+  n_periods <- 300L
+  alphas <- matrix(nrow = n_periods + 1L, ncol = p)
+  alphas[1L, ] <- rnorm(p) %*% chol(Q_0)
+  for(i in 1:n_periods + 1L)
+    alphas[i, ] <- F. %*% alphas[i - 1L, ] + drop(rnorm(p) %*% chol(Q))
+
+  alphas <- t(t(alphas) + beta)
+
+  # simulate individuals' outcome
+  n_obs <- g * k
+  df <- lapply(1:n_obs, function(i){
+    # find the group
+    grp <- (i - 1L) %/% (n_obs / g) + 1L
+
+    # left-censoring
+    tstart <- max(0L, sample.int((n_periods - 1L) * 2L, 1) - n_periods + 1L)
+
+    # covariates
+    x <- c(1, rnorm(1))
+
+    # outcome (stop time and event indicator)
+    osa <- NULL
+    oso <- NULL
+    osx <- NULL
+    y <- FALSE
+    for(tstop in (tstart + 1L):n_periods){
+      sigmoid <- 1 / (1 + exp(- drop(x %*% alphas[tstop + 1L, c(grp, p)])))
+      if(sigmoid > runif(1)){
+        y <- TRUE
+        break
+      }
+      if(.01 > runif(1L) && tstop < n_periods){
+        # sample new covariate
+        osa <- c(osa, tstart)
+        tstart <- tstop
+        oso <- c(oso, tstop)
+        osx <- c(osx, x[2])
+        x[2] <- rnorm(1)
+      }
+    }
+
+    cbind(
+      tstart = c(osa, tstart), tstop = c(oso, tstop),
+      x = c(osx, x[2]), y = c(rep(FALSE, length(osa)), y), grp = grp,
+      id = i)
+  })
+  df <- data.frame(do.call(rbind, df))
+  df$grp <- factor(df$grp)
+
+  # fit model. Start with "cheap" iterations
+  fit <- suppressWarnings(PF_EM(
+    fixed = Surv(tstart, tstop, y) ~ x, random = ~ grp + x - 1,
+    data = df, model = "logit", by = 1L, max_T = max(df$tstop),
+    Q_0 = diag(1.5^2, p), id = df$id, type = "VAR",
+    G = G, theta = c(.5, .5), J = J, psi = log(c(.1, .1)),
+    K = K, phi = log(-(c(.4, 0) + 1) / (c(.4, 0) - 1)),
+    control = PF_control(
+      N_fw_n_bw = 100L, N_smooth = 100L, N_first = 500L,
+      method = "AUX_normal_approx_w_cloud_mean",
+      Q_tilde = diag(.05^2, p),
+      n_max = 2L,  # should maybe be larger
+      smoother = "Fearnhead_O_N", eps = 1e-4,
+      n_threads = 4L # depends on you cpu(s)
+    )))
+
+  expect_known_value(fit[!names(fit) %in% c("clouds", "call")],
+                     "local_tests/pf_man_restrict_fit_ex.RDS")
+
+  # take more iterations with more particles
+  cl <- fit$call
+  ctrl <- cl[["control"]]
+  ctrl[c("N_fw_n_bw", "N_smooth", "N_first", "n_max")] <- list(
+    400L, 500L, 1000L, 1L)
+  cl[["control"]] <- ctrl
+  cl[c("phi", "psi", "theta")] <- list(fit$phi, fit$psi, fit$theta)
+  fit_extra <- suppressWarnings(eval(cl))
+
+  expect_known_value(fit_extra[!names(fit_extra) %in% c("clouds", "call")],
+                     "local_tests/pf_man_restrict_fit_ex_more.RDS")
+
+  # plot predicted state variables
+  for(i in 1:p){
+    plot(fit_extra, cov_index = i)
+    abline(h = 0, lty = 2)
+    lines(1:nrow(alphas) - 1, alphas[, i] - beta[i], lty = 3)
+  }
+})
+
+test_that("`PF_forward_filter` the results stated in the comments and does not alter the .Random.seed as stated on the help page", {
+  skip_on_cran()
+
+  # head-and-neck cancer study data
+  # see Efron, B. (1988) doi:10.2307/2288857
+  is_censored <- c(
+    6, 27, 34, 36, 42, 46, 48:51, 51 + c(15, 30:28, 33, 35:37, 39, 40, 42:45))
+  head_neck_cancer <- data.frame(
+    id = 1:96,
+    stop = c(
+      1, 2, 2, rep(3, 6), 4, 4, rep(5, 8),
+      rep(6, 7), 7, 8, 8, 8, 9, 9, 10, 10, 10, 11, 14, 14, 14, 15, 18, 18, 20,
+      20, 37, 37, 38, 41, 45, 47, 47,
+      2, 2, 3, rep(4, 4), rep(5, 5), rep(6, 5),
+      7, 7, 7, 9, 10, 11, 12, 15, 16, 18, 18, 18, 21,
+      21, 24, 25, 27, 36, 41, 44, 52, 54, 59, 59, 63, 67, 71, 76),
+    event = !(1:96 %in% is_censored),
+    group = factor(c(rep(1, 45 + 6), rep(2, 45))))
+
+  # fit model
+  set.seed(61364778)
+  ctrl <- PF_control(
+    N_fw_n_bw = 500, N_smooth = 2500, N_first = 2000,
+    n_max = 1, # set to one as an example
+    n_threads = max(parallel::detectCores(logical = FALSE), 1),
+    eps = .001, Q_tilde = as.matrix(.3^2), est_a_0 = FALSE)
+  pf_fit <- suppressWarnings(
+    PF_EM(
+      survival::Surv(stop, event) ~ ddFixed(group),
+      data = head_neck_cancer, by = 1, Q_0 = 1, Q = 0.1^2, control = ctrl,
+      max_T = 30))
+
+  # the log-likelihood in the final iteration
+  # dput((end_log_like <- tail(pf_fit$log_likes, 1)))
+  expect_equal((end_log_like <- tail(pf_fit$log_likes, 1)), -251.123404920722)
+
+
+  # gives the same
+  seed_now <- .GlobalEnv$.Random.seed
+  fw_ps <- PF_forward_filter(
+    survival::Surv(stop, event) ~ ddFixed(group), N_fw = 500, N_first = 2000,
+    data = head_neck_cancer, by = 1, Q_0 = 1, Q = 0.1^2, Fmat = 1, R = 1,
+    a_0 = pf_fit$a_0, fixed_effects = -0.5370051,
+    control = ctrl, max_T = 30, seed = pf_fit$seed)
+  expect_true(isTRUE(all.equal(end_log_like, logLik(fw_ps))))
+  expect_equal(seed_now, .GlobalEnv$.Random.seed)
+
+  # will differ since we use different number of particles
+  fw_ps <- PF_forward_filter(
+    survival::Surv(stop, event) ~ ddFixed(group), N_fw = 1000, N_first = 3000,
+    data = head_neck_cancer, by = 1, Q_0 = 1, Q = 0.1^2, Fmat = 1, R = 1,
+    a_0 = pf_fit$a_0, fixed_effects = -0.5370051,
+    control = ctrl, max_T = 30, seed = pf_fit$seed)
+  expect_false(isTRUE(all.equal(end_log_like, logLik(fw_ps))))
+  expect_equal(seed_now, .GlobalEnv$.Random.seed)
+
+  # will differ since we use the final estimates
+  fw_ps <- PF_forward_filter(pf_fit, N_fw = 500, N_first = 2000)
+  expect_false(isTRUE(all.equal(end_log_like, logLik(fw_ps))))
+  expect_equal(seed_now, .GlobalEnv$.Random.seed)
+
+  # should give the same when called again
+  fw_ps_2 <- PF_forward_filter(pf_fit, N_fw = 500, N_first = 2000)
+  expect_equal(fw_ps, fw_ps_2)
+
+  # but not when we change the seed argument
+  runif(100)
+  fw_ps_3 <- PF_forward_filter(
+    pf_fit, N_fw = 500, N_first = 2000, seed = .Random.seed)
+  expect_false(isTRUE(all.equal(fw_ps, fw_ps_3)))
 })

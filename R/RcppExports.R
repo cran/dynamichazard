@@ -5,8 +5,8 @@ bigglm_regcf_rcpp <- function(D, rbar, thetab, ss, checked, tol) {
     .Call(`_dynamichazard_bigglm_regcf_rcpp`, D, rbar, thetab, ss, checked, tol)
 }
 
-ddhazard_fit_cpp <- function(X, fixed_terms, weights, tstart, tstop, a_0, fixed_parems_start, R, L, m, Q_0, Q, risk_obj, F_, eps_fixed_parems, max_it_fixed_params, n_max = 100L, eps = 0.001, verbose = 0L, est_Q_0 = TRUE, method = "EKF", kappa = NULL, alpha = NULL, beta = NULL, NR_eps = NULL, LR = NULL, model = "logit", M_step_formulation = "Fahrmier94", fixed_effect_chunk_size = 2e4L, debug = FALSE, NR_it_max = 100L, n_threads = -1L, denom_term = .0001, n_fixed_terms_in_state_vec = 0L, use_pinv = FALSE, criteria = "delta_coef", posterior_version = "cholesky", GMA_max_rep = 10L, GMA_NR_eps = 0.1, EKF_batch_size = 5000L) {
-    .Call(`_dynamichazard_ddhazard_fit_cpp`, X, fixed_terms, weights, tstart, tstop, a_0, fixed_parems_start, R, L, m, Q_0, Q, risk_obj, F_, eps_fixed_parems, max_it_fixed_params, n_max, eps, verbose, est_Q_0, method, kappa, alpha, beta, NR_eps, LR, model, M_step_formulation, fixed_effect_chunk_size, debug, NR_it_max, n_threads, denom_term, n_fixed_terms_in_state_vec, use_pinv, criteria, posterior_version, GMA_max_rep, GMA_NR_eps, EKF_batch_size)
+ddhazard_fit_cpp <- function(X, fixed_terms, weights, tstart, tstop, a_0, fixed_parems_start, R, L, Q_0, Q, risk_obj, F_, eps_fixed_parems, max_it_fixed_params, n_max = 100L, eps = 0.001, verbose = 0L, est_Q_0 = TRUE, method = "EKF", kappa = NULL, alpha = NULL, beta = NULL, NR_eps = NULL, LR = NULL, model = "logit", M_step_formulation = "Fahrmier94", fixed_effect_chunk_size = 2e4L, debug = FALSE, NR_it_max = 100L, n_threads = -1L, denom_term = .0001, n_fixed_terms_in_state_vec = 0L, use_pinv = FALSE, criteria = "delta_coef", posterior_version = "cholesky", GMA_max_rep = 10L, GMA_NR_eps = 0.1, EKF_batch_size = 5000L, est_a_0 = TRUE) {
+    .Call(`_dynamichazard_ddhazard_fit_cpp`, X, fixed_terms, weights, tstart, tstop, a_0, fixed_parems_start, R, L, Q_0, Q, risk_obj, F_, eps_fixed_parems, max_it_fixed_params, n_max, eps, verbose, est_Q_0, method, kappa, alpha, beta, NR_eps, LR, model, M_step_formulation, fixed_effect_chunk_size, debug, NR_it_max, n_threads, denom_term, n_fixed_terms_in_state_vec, use_pinv, criteria, posterior_version, GMA_max_rep, GMA_NR_eps, EKF_batch_size, est_a_0)
 }
 
 sample_indices_test <- function(size, probs) {
@@ -121,16 +121,20 @@ parallelglm <- function(X, Ys, family, beta0, weights, offsets, tol = 1e-8, nthr
     .Call(`_dynamichazard_parallelglm`, X, Ys, family, beta0, weights, offsets, tol, nthreads, it_max, trace, method)
 }
 
-PF_smooth <- function(n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, L, m, Q_0, Q, Q_tilde, risk_obj, F, n_max, n_threads, fixed_parems, N_fw_n_bw, N_smooth, forward_backward_ESS_threshold, debug, N_first, method, smoother, model) {
-    .Call(`_dynamichazard_PF_smooth`, n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, L, m, Q_0, Q, Q_tilde, risk_obj, F, n_max, n_threads, fixed_parems, N_fw_n_bw, N_smooth, forward_backward_ESS_threshold, debug, N_first, method, smoother, model)
+PF_smooth <- function(n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, Q_0, Q, Q_tilde, risk_obj, F, n_max, n_threads, fixed_parems, N_fw_n_bw, N_smooth, forward_backward_ESS_threshold, debug, N_first, type, method, smoother, model) {
+    .Call(`_dynamichazard_PF_smooth`, n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, Q_0, Q, Q_tilde, risk_obj, F, n_max, n_threads, fixed_parems, N_fw_n_bw, N_smooth, forward_backward_ESS_threshold, debug, N_first, type, method, smoother, model)
 }
 
-particle_filter <- function(n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, L, m, Q_0, Q, Q_tilde, risk_obj, F, n_max, n_threads, fixed_parems, N_fw_n_bw, N_smooth, forward_backward_ESS_threshold, debug, N_first, is_forward, method, model) {
-    .Call(`_dynamichazard_particle_filter`, n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, L, m, Q_0, Q, Q_tilde, risk_obj, F, n_max, n_threads, fixed_parems, N_fw_n_bw, N_smooth, forward_backward_ESS_threshold, debug, N_first, is_forward, method, model)
+particle_filter <- function(n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, Q_0, Q, Q_tilde, risk_obj, F, n_threads, fixed_parems, N_fw_n_bw, forward_backward_ESS_threshold, debug, N_first, type, is_forward, method, model) {
+    .Call(`_dynamichazard_particle_filter`, n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, Q_0, Q, Q_tilde, risk_obj, F, n_threads, fixed_parems, N_fw_n_bw, forward_backward_ESS_threshold, debug, N_first, type, is_forward, method, model)
 }
 
-compute_summary_stats_first_o_RW <- function(rcpp_list, n_threads, a_0, Q, Q_0) {
-    .Call(`_dynamichazard_compute_summary_stats_first_o_RW`, rcpp_list, n_threads, a_0, Q, Q_0)
+compute_PF_summary_stats <- function(rcpp_list, n_threads, a_0, Q, Q_0, R, debug, F, do_use_F = FALSE, do_compute_E_x = TRUE) {
+    .Call(`_dynamichazard_compute_PF_summary_stats`, rcpp_list, n_threads, a_0, Q, Q_0, R, debug, F, do_use_F, do_compute_E_x)
+}
+
+PF_est_params_dens <- function(rcpp_list, n_threads, a_0, Q, Q_0, R, debug, do_est_a_0 = FALSE, only_QR = FALSE) {
+    .Call(`_dynamichazard_PF_est_params_dens`, rcpp_list, n_threads, a_0, Q, Q_0, R, debug, do_est_a_0, only_QR)
 }
 
 test_copy_mat <- function(X, n_times) {
@@ -141,8 +145,8 @@ test_copy_vec <- function(x, n_times) {
     .Call(`_dynamichazard_test_copy_vec`, x, n_times)
 }
 
-pf_fixed_effect_iteration <- function(X, Y, dts, cloud, cl_weights, ran_vars, beta, family, max_threads, max_bytes = 20000000L) {
-    .Call(`_dynamichazard_pf_fixed_effect_iteration`, X, Y, dts, cloud, cl_weights, ran_vars, beta, family, max_threads, max_bytes)
+pf_fixed_effect_get_QR <- function(clouds, risk_obj, ran_vars, fixed_terms, R_top, tstart, tstop, fixed_parems, family, max_threads, debug, max_bytes = 1000000L) {
+    .Call(`_dynamichazard_pf_fixed_effect_get_QR`, clouds, risk_obj, ran_vars, fixed_terms, R_top, tstart, tstop, fixed_parems, family, max_threads, debug, max_bytes)
 }
 
 get_risk_obj_rcpp <- function(start, stop, event, by, start_order, max_T, order_by_id_and_rev_start, id, min_start, event_times_in, is_for_discrete_model = TRUE) {

@@ -35,14 +35,15 @@ test_that("PF_smooth gives same results", {
   n_vars <- 2
   set.seed(78095324)
   sims <- test_sim_func_logit(
-    n_series = 1e3, n_vars = n_vars, t_0 = 0, t_max = 10,
+    n_series = 250, n_vars = n_vars, t_0 = 0, t_max = 10,
     x_range = 1, x_mean = 0, re_draw = T, beta_start = rnorm(n_vars),
     intercept_start = -3, sds = c(.1, rep(.5, n_vars)))
 
-  X_Y = get_design_matrix(Surv(tstart, tstop, event) ~ . - id, sims$res)
-  risk_set <-
-    get_risk_obj(Y = X_Y$Y, by = 1, max_T = 10,
-                 id = sims$res$id, is_for_discrete_model = TRUE)
+  frm <- Surv(tstart, tstop, event) ~ . - id
+  X_Y = get_design_matrix(frm, sims$res)
+  risk_set <- get_risk_obj(
+    Y = X_Y$Y, by = 1, max_T = 10, id = sims$res$id,
+    is_for_discrete_model = TRUE)
 
   # sum(sims$res$event)
   # matplot(sims$beta, type = "l", lty = 1)
@@ -54,36 +55,24 @@ test_that("PF_smooth gives same results", {
 
   args <- list(
     n_fixed_terms_in_state_vec = 0,
-    X = t(X_Y$X),
-    fixed_terms = t(X_Y$fixed_terms),
-    tstart = X_Y$Y[1, ],
-    tstop = X_Y$Y[2, ],
+    X = t(X_Y$X), fixed_terms = t(X_Y$fixed_terms),
+    tstart = X_Y$Y[, 1], tstop = X_Y$Y[, 2], R = diag(1, ncol(Q)), Q_0 = Q_0,
+    fixed_parems = numeric(), Q = Q, a_0 = a_0, Q_tilde = diag(1e-2, n_vars + 1),
+    risk_obj = risk_set, F = diag(1, n_vars + 1), n_max = 10, n_threads = 1,
+    N_fw_n_bw = 20, N_smooth = 100, N_first = 100,
+    forward_backward_ESS_threshold = NULL, debug = 0, method = "PF",
+    smoother = "Fearnhead_O_N", model = "logit", type = "RW")
 
-    R = diag(1, ncol(Q)),
-    L = diag(1, length(a_0)),
-    m = numeric(length(a_0)),
-    Q_0 = Q_0,
+  fw_args <- list(
+    x = frm, N_fw = args$N_fw_n_bw, N_first = args$N_first, data = sims$res,
+    by = 1, fixed_effects = numeric(), control = PF_control(
+      N_fw_n_bw = 1, N_smooth = 1, N_first = 1, method = args$method,
+      Q_tilde = args$Q_tilde, n_threads = 1),
+    max_T = 10, Fmat = diag(1, 3), trace = 0, id = sims$res$id)
+  fw_args <- c(fw_args, args[
+    intersect(names(args), names(formals(PF_forward_filter.formula)))])
 
-    fixed_parems = numeric(),
-
-    Q = Q,
-    a_0 = a_0,
-
-    Q_tilde = diag(1e-2, n_vars + 1),
-    risk_obj = risk_set,
-    F = diag(1, n_vars + 1),
-    n_max = 10,
-    n_threads = 1,
-    N_fw_n_bw = 20,
-    N_smooth = 100,
-    N_first = 100,
-    forward_backward_ESS_threshold = NULL,
-    debug = 0,
-    method = "PF",
-    smoother = "Fearnhead_O_N",
-    model = "logit")
-
-  test_func <- function(fit_quote, test_file_name, update = FALSE){
+  test_func <- function(test_file_name, update = FALSE){
     get_func <- quote(
       function(x){
         cloud <- bquote(.(substitute(x)))
@@ -93,10 +82,22 @@ test_that("PF_smooth gives same results", {
         })
       })
 
+    cl <- list(quote(PF_smooth))
+    cl[names(args)] <- lapply(names(args), function(x)
+      substitute(args$z, list(z = as.symbol(x))))
+    cl <- as.call(cl)
+
+    cl_fw <- list(quote(PF_forward_filter))
+    cl_fw[names(fw_args)] <- lapply(names(fw_args), function(x)
+      substitute(fw_args$z, list(z = as.symbol(x))))
+    cl_fw <- as.call(cl_fw)
+
     q <- bquote({
       set.seed(30302129)
       old_seed <- .Random.seed
-      result <- .(fit_quote)
+
+      result <- .(cl)
+
       expect_false(all(old_seed == .Random.seed))
 
       #####
@@ -120,9 +121,16 @@ test_that("PF_smooth gives same results", {
       }
 
       #####
+      # We should get the same with the forward filter
+      set.seed(30302129)
+      fw_res <- .(cl_fw)
+
+      expect_equal(fw_res$forward_clouds, result$forward_clouds)
+
+      #####
       # Changing the seed changes the result
       set.seed(1)
-      result_new_seed <- .(fit_quote)
+      result_new_seed <- .(cl)
 
       expect_false(isTRUE(all.equal(result, result_new_seed)))
 
@@ -132,7 +140,7 @@ test_that("PF_smooth gives same results", {
       old_args <- args
       args$n_threads <- max(parallel::detectCores(logical = FALSE), 1)
 
-      result_multi <- .(fit_quote)
+      result_multi <- .(cl)
       expect_equal(result_multi, result)
 
       args <- old_args
@@ -141,6 +149,12 @@ test_that("PF_smooth gives same results", {
       # Test versus previous computed values
 
       # Compute clouds means to test against
+      if(.(update)){
+        sm <- get_means(result)$smoothed_clouds
+        matplot(sm, ylim = range(sm, sims$betas), type = "l", lty = 1)
+        matplot(sims$betas, lty = 2, type = "l", add = TRUE)
+      }
+
       .file <- paste0(.(test_file_name), "_cloud_means.RDS")
       eval(substitute(
         expect_known_value(
@@ -162,58 +176,34 @@ test_that("PF_smooth gives same results", {
 
   #####
   # Simple PF
-  test_func(
-    quote({
-      args$method <- "bootstrap_filter"
-      do.call(PF_smooth, args)
-    }),
-    test_file_name = "bootstrap_filter")
+  fw_args$control$method <- args$method <- "bootstrap_filter"
+  test_func(test_file_name = "bootstrap_filter")
 
   #####
   # Normal approximation in importance density with mean from previous cloud
-  test_func(
-    quote({
-      args$method <- "PF_normal_approx_w_cloud_mean"
-      do.call(PF_smooth, args)
-    }),
-    test_file_name = "PF_normal_approx_w_cloud_mean")
+  fw_args$control$method <- args$method <- "PF_normal_approx_w_cloud_mean"
+  test_func(test_file_name = "PF_normal_approx_w_cloud_mean")
 
   #####
   # Normal approximation in AUX filter with mean from previous cloud
-  test_func(
-    quote({
-      args$method <- "AUX_normal_approx_w_cloud_mean"
-      do.call(PF_smooth, args)
-    }),
-    test_file_name = "AUX_normal_approx_w_cloud_mean")
+  fw_args$control$method <- args$method <- "AUX_normal_approx_w_cloud_mean"
+  test_func(test_file_name = "AUX_normal_approx_w_cloud_mean")
 
   #####
   # Normal approximation in importance density with mean from parent and child particle
-  test_func(
-    quote({
-      args$method <- "PF_normal_approx_w_particles"
-      do.call(PF_smooth, args)
-    }),
-    test_file_name = "PF_normal_approx_w_particles")
+  fw_args$control$method <- args$method <- "PF_normal_approx_w_particles"
+  test_func(test_file_name = "PF_normal_approx_w_particles")
 
   #####
   # Normal approximation in AUX filter with mean from parent and child particle
-  test_func(
-    quote({
-      args$method <- "AUX_normal_approx_w_particles"
-      do.call(PF_smooth, args)
-    }),
-    test_file_name = "AUX_normal_approx_w_particles")
+  fw_args$control$method <- args$method <- "AUX_normal_approx_w_particles"
+  test_func(test_file_name = "AUX_normal_approx_w_particles")
 
   #####
   # Test O(n^2) method from Brier et al
-  test_func(
-    quote({
-      args$method <- "AUX_normal_approx_w_particles"
-      args$smoother <- "Brier_O_N_square"
-      do.call(PF_smooth, args)
-    }),
-    test_file_name = "Brier_AUX_normal_w_particles")
+  fw_args$control$method <- args$method <- "AUX_normal_approx_w_particles"
+  args$smoother <- "Brier_O_N_square"
+  test_func(test_file_name = "Brier_AUX_normal_w_particles")
 })
 
 test_that("Import and export PF cloud from Rcpp gives the same", {
@@ -290,7 +280,8 @@ test_that("PF_EM gives previous results on head neck data set", {
       n_threads =  max(parallel::detectCores(logical = FALSE), 1)),
     max_T = 45)
 
-  test_func <- function(smoother, file_name){
+  test_func <- function(
+    smoother, file_name, do_update = FALSE, do_print_fname = FALSE){
     f1 <- paste0("local_tests/", file_name)
     f2 <- paste0(file_name, "_cloud_means")
 
@@ -314,16 +305,25 @@ test_that("PF_EM gives previous results on head neck data set", {
 
       #####
       # Test versus previous computed values
-      result <- result[c("a_0", "Q", "clouds", "summary_stats", "log_likes",
+      result <- result[c("a_0", "Q", "clouds", "EM_ests", "log_likes",
                          "n_iter", "effective_sample_size", "seed")]
 
-      # save_to_test(result, .(f1))
+      if(.(do_print_fname)){
+        func <- function(x)
+          cat("tmp <- readRDS('previous_results/", x, ".RDS')\n", sep = "")
+        func(.(f1))
+        func(.(f2))
+      }
+      if(.(do_update))
+        save_to_test(result, .(f1))
+
       test_if_file_exists(
         .(f1),
         expect_equal(result, read_to_test(.(f1)), tolerance = 1.49e-08))
 
       # Compute clouds means to test against
-      # save_to_test(get_means(result$clouds), file_name = .(f2))
+      if(.(do_update))
+        save_to_test(get_means(result$clouds), file_name = .(f2))
       expect_equal(get_means(result$clouds), read_to_test(.(f2)),
                    tolerance = 1.49e-08)
     })
@@ -345,7 +345,7 @@ test_that("PF_EM gives previous results on head neck data set with fixed effects
     PF_EM(
       formula = survival::Surv(start, stop, event) ~ ddFixed(group),
       data = head_neck_cancer,
-      by = 1, Q_0 = 10, Q = 0.01,
+      by = 1, Q_0 = 1, Q = 0.01,
       control = PF_control(
         N_fw_n_bw = 200, N_smooth = 2e3, N_first = 2e3,
         n_max = 3,
@@ -353,19 +353,22 @@ test_that("PF_EM gives previous results on head neck data set with fixed effects
         n_threads = max(parallel::detectCores(logical = FALSE), 1)),
       max_T = 30))
 
-  expect_known_value(pp_fit[!names(pp_fit) %in%
-                             c("clouds", "call", "summary_stats")],
+  # tmp <- readRDS("previous_results/local_tests/pf_logit_w_fixed.RDS")
+  expect_known_value(pp_fit[!names(pp_fit) %in% c("clouds", "call")],
                      "local_tests/pf_logit_w_fixed.RDS")
 })
 
-test_that("compute_summary_stats_first_o_RW gives previous results", {
+test_that("compute_PF_summary_stats gives previous results", {
   skip_on_cran()
 
+  F. <- diag(1, 2)
+  F1 <- matrix(c(.5, 0, .1, .3), 2)
   Q_0 <- diag(1, 2)
   Q <- diag(0.1, 2)
   a_0 <- c(-3.6, 0)
+  R <- diag(1, 2)
 
-  test_func <- function(data_file, test_file){
+  test_func <- function(data_file, test_file, do_update = FALSE){
     q <- bquote({
       test_if_file_exists(
         .(data_file),
@@ -374,14 +377,46 @@ test_that("compute_summary_stats_first_o_RW gives previous results", {
 
           #####
           # Test that multithreaded version gives the same
-          sum_stats <- compute_summary_stats_first_o_RW(cloud_example, 1, a_0 = a_0, Q = Q, Q_0 = Q_0)
-          s2 <- compute_summary_stats_first_o_RW(cloud_example, 4, a_0 = a_0, Q = Q, Q_0 = Q_0)
+          sum_stats <- compute_PF_summary_stats(
+            cloud_example, 1, a_0 = a_0, Q = Q, Q_0 = Q_0, R = R,
+            debug = FALSE, F = F.)
+          s2 <- compute_PF_summary_stats(
+            cloud_example, 4, a_0 = a_0, Q = Q, Q_0 = Q_0, R = R,
+            debug = FALSE, F = F.)
 
           expect_equal(sum_stats, s2)
 
+          # we should get the same when we use F
+          s3 <- compute_PF_summary_stats(
+            cloud_example, 4, a_0 = a_0, Q = Q, Q_0 = Q_0, R = R,
+            debug = FALSE, F = F., do_use_F = TRUE)
+          expect_equal(sum_stats, s3)
+
+          # should only compute the latter sets of elements only
+          s4 <- compute_PF_summary_stats(
+            cloud_example, 4, a_0 = a_0, Q = Q, Q_0 = Q_0, R = R,
+            debug = FALSE, F = F., do_compute_E_x = FALSE)
+          expect_equal(lapply(sum_stats, "[[", "E_x_less_x_less_one_outers"),
+                       lapply(s4       , "[[", "E_x_less_x_less_one_outers"))
+          expect_true(all(do.call(rbind, lapply(s4, "[[", "E_xs")) == 0))
+
+          # should get the same when we compute with F on our site
+          cp <- cloud_example
+          for(i in 1:(length(cp$forward_clouds) - 1))
+            cp$forward_clouds[[i]]$states <-
+              F1 %*% cp$forward_clouds[[i]]$states
+          s5 <- compute_PF_summary_stats(
+            cloud_example, 4, a_0 = a_0, Q = Q, Q_0 = Q_0, R = R,
+            debug = FALSE, F = F1, do_use_F = TRUE)
+          s6 <- compute_PF_summary_stats(
+            cp           , 4, a_0 = a_0, Q = Q, Q_0 = Q_0, R = R,
+            debug = FALSE, F = F., do_use_F = FALSE)
+          expect_equal(s5, s6)
+
           #####
           # Test versus previous results
-          # save_to_test(sum_stats, .(test_file))
+          if(.(do_update))
+            save_to_test(sum_stats, .(test_file))
           expect_equal(sum_stats, read_to_test(.(test_file)), tolerance = 1.49e-08)
       })
     })
@@ -395,4 +430,333 @@ test_that("compute_summary_stats_first_o_RW gives previous results", {
   # Test with method from Brier et al (2010)
   test_func("local_tests/PF_head_neck_w_Brier_method",
             "local_tests/compute_summary_stats_w_Brier_method")
+})
+
+test_that("´est_params_dens´ gives the same as a R version", {
+  skip_on_cran()
+  fit <- suppressWarnings(PF_EM(
+    formula = survival::Surv(start, stop, event) ~ group,
+    data = head_neck_cancer,
+    by = 1, Q_0 = diag(1, 2), Q = diag(0.1, 2),
+    control = list(
+      N_fw_n_bw = 200, N_smooth = 1e3, N_first = 2e3, n_max = 1),
+    max_T = 45, type = "VAR"))
+
+  . <- function(bw, this){
+    ws <- sqrt(this$weights)
+    good <- which(ws > 1e-8)
+    ws <- ws[good]
+
+    X_new <- t(bw$states[, this$parent_idx[good], drop = FALSE])
+    Y_new <- t(this$states[, good, drop = FALSE])
+
+    list(X = X_new, Y = Y_new, sqrt_ws = ws)
+  }
+
+  X <- Y <- matrix(ncol = 2)[-1, , drop = FALSE]
+  sqrt_ws <- numeric()
+  fw_clouds <- fit$clouds$forward_clouds
+  clouds <- fit$clouds$smoothed_clouds
+
+  for(i in 2:length(clouds)){
+    out <- .(fw_clouds[[i]], clouds[[i]])
+
+    sqrt_ws <- c(sqrt_ws, out$sqrt_ws)
+    X <- rbind(X, out$X)
+    Y <- rbind(Y, out$Y)
+  }
+
+  wX <- X * sqrt_ws
+  wY <- Y * sqrt_ws
+  lm_fit <- lm(Y ~ X - 1, weights = sqrt_ws^2)
+  expect_equal(lm_fit$coefficients, t(fit$F), check.attributes = FALSE)
+
+  qr_obj <- qr(wX)
+  qty <- qr.qty(qr_obj, wY)[1:ncol(wX), ]
+  Q <- (crossprod(wY) - crossprod(qty)) / (length(clouds) - 1)
+  expect_equal(Q, fit$Q, check.attributes = FALSE)
+
+  Q <- crossprod(wY - wX %*% lm_fit$coefficients) / (length(clouds) - 1)
+  expect_equal(Q, fit$Q, check.attributes = FALSE)
+})
+
+test_that("fixed effect estimation gives the same as an R implementation", {
+  skip_on_cran()
+
+  # specific function for this example. Only works when 1 fixed and 1 varying
+  # parameter
+  R_est_func <- function(pf_res, fam, start){
+    cl <- pf_res$call
+    cl <- cl[c(1, match(
+      c("formula", "data", "max_T", "id", "trace", "order", "by", "model"),
+      names(cl), 0))]
+    cl$trace <- 0
+    cl[[1]] <- quote(dynamichazard:::.get_PF_static_args)
+    static_args <- eval(cl)
+
+    cls <- pf_res$clouds$smoothed_clouds
+    d <- length(cls)
+    tstop  <- static_args$tstop
+    tstart <- static_args$tstart
+
+    y <- offs <- Z <- ws <- NULL
+    for(i in 1:d){
+      r_set <- static_args$risk_obj$risk_sets[[i]]
+      X_i <- static_args$X[, r_set]
+      Z_i <- static_args$fixed_terms[, r_set]
+      Y_i <- static_args$risk_obj$is_event_in[r_set] == (i - 1L)
+
+      cl <- cls[[i]]
+      good <- which(drop(cl$weights > 1e-7))
+      ws_i <- cl$weights[good]
+      sta <- cl$states[good]
+
+      off <- c(sapply(sta, function(s) s * X_i))
+      if(fam == "exponential")
+        off <- off + log(pmin(tstop[r_set], i) - pmax(tstart[r_set], i - 1))
+
+      ws_i <- c(sapply(ws_i, rep, times = length(r_set)))
+      Z_i <- rep(Z_i, length(good))
+      Y_i <- rep(Y_i, length(good))
+
+      ws <- c(ws, ws_i)
+      Z <- c(Z, Z_i)
+      offs <- c(offs, off)
+      y <- c(y, Y_i)
+    }
+
+    fam <- if(fam == "exponential") poisson else binomial
+    suppressWarnings(
+      # avoid `non-integer #successes in a binomial glm!`
+      # and the non-covergence warning
+      glm(y ~ Z - 1, family = fam, offset = offs, weights = ws,
+          control = glm.control(maxit = 1), start = start))
+  }
+
+  fam <- "logit"
+  set.seed(19724898)
+  pf_fit <- suppressWarnings(PF_EM(
+    formula = survival::Surv(start, stop, event) ~ ddFixed(group),
+    data = head_neck_cancer, id = head_neck_cancer$id, model = fam,
+    by = 1, Q_0 = 1, Q = .1,
+    control = list(
+      N_fw_n_bw = 100, N_smooth = 200, N_first = 1000, n_max = 1),
+    max_T = 45, type = "RW"))
+
+  # start is found by running the above with `trace = 1`
+  fit <- R_est_func(pf_fit, fam, start = 0.6576882362117193)
+  expect_equal(
+    fit$coefficients, pf_fit$fixed_effects, check.attributes = FALSE)
+
+  fam <- "exponential"
+  pf_fit <- suppressWarnings(PF_EM(
+    formula = survival::Surv(start, stop, event) ~ ddFixed(group),
+    data = head_neck_cancer, id = head_neck_cancer$id, model = fam,
+    by = 1, Q_0 = 1, Q = .1,
+    control = list(
+      N_fw_n_bw = 100, N_smooth = 200, N_first = 1000, n_max = 1),
+    max_T = 45, type = "RW"))
+  fit <- R_est_func(pf_fit, fam, start = 0.6255092546830791)
+  expect_equal(
+    fit$coefficients, pf_fit$fixed_effects, check.attributes = FALSE)
+})
+
+test_that("A few iterations with `type = \"VAR\"' yields the same as before", {
+  skip_on_cran()
+
+  n_obs     <- 2000L
+  n_periods <- 300L
+
+  # Fmat <- matrix(c(.8, 0, 0, .8), 2)
+  # Rmat <- diag(1    , 2)
+  # Qmat <- diag(.33^2, 2)
+  # get_Q_0 <- function(Qmat, Fmat){
+  #   # see https://math.stackexchange.com/q/2854333/253239
+  #   eg  <- eigen(Fmat)
+  #   las <- eg$values
+  #   if(any(abs(las) >= 1))
+  #     stop("Divergent series")
+  #   U   <- eg$vectors
+  #   U_t <- t(U)
+  #   T.  <- crossprod(U, Qmat %*% U)
+  #   Z   <- T. / (1 - tcrossprod(las))
+  #   solve(U_t, t(solve(U_t, t(Z))))
+  # }
+  # Q_0  <- get_Q_0(Qmat, Fmat)
+  # beta <- c(-6.5, -2)
+  #
+  # set.seed(54432125)
+  # betas <- matrix(nrow = n_periods + 1, ncol = 2)
+  # betas[1, ] <- rnorm(2) %*% chol(Q_0)
+  # for(i in 1:n_periods + 1)
+  #   betas[i, ] <- Fmat %*% betas[i - 1, ] + drop(rnorm(2) %*% chol(Qmat))
+  #
+  # betas <- t(t(betas) + beta)
+  #
+  # df <- replicate(n_obs, {
+  #   # left-censoring
+  #   tstart <- max(0L, sample.int((n_periods - 1L) * 2L, 1) - n_periods + 1L)
+  #
+  #   # covariates
+  #   x <- runif(1, -1, 1)
+  #   covars <- c(1, x)
+  #
+  #   # outcome (stop time and event indicator)
+  #   y <- FALSE
+  #   for(tstop in (tstart + 1L):n_periods){
+  #     fail_time <- rexp(1) / exp(covars %*% betas[tstop + 1L, ])
+  #     if(fail_time <= 1){
+  #       y <- TRUE
+  #       tstop <- tstop - 1L + fail_time
+  #       break
+  #     }
+  #   }
+  #
+  #   c(tstart = tstart, tstop = tstop, x = x, y = y)
+  # })
+  # df <- data.frame(t(df))
+  # saveRDS(df, "VAR_data.RDS")
+  df <- readRDS("VAR_data.RDS")
+
+  # this tend toward the true values. We only take a few iterations though...
+  set.seed(30520116)
+  pf_Fear <- suppressWarnings(PF_EM(
+    Surv(tstart, tstop, y) ~ x + ddFixed(x) + ddFixed_intercept(TRUE), df,
+    Q_0 = diag(1, 2), Q = diag(1, 2), Fmat = matrix(c(.1, 0, 0, .1), 2),
+    by = 1, type = "VAR", model = "exponential", max_T = n_periods,
+    control = PF_control(
+      N_fw_n_bw = 50, N_smooth = 100, N_first = 500, eps = .001,
+      method = "AUX_normal_approx_w_cloud_mean",
+      n_max = 3, smoother = "Fearnhead_O_N",
+      Q_tilde = diag(.3^2, 2), n_threads = 4)))
+
+  # old <- readRDS(file.path("previous_results", "PF_VARS.RDS"))
+  expect_known_value(pf_Fear[!names(pf_Fear) %in% "clouds"],
+                     file = "PF_VARS.RDS")
+})
+
+test_that("Commutation matrix is correct", {
+  A <- structure(c(0.96, 0.27, -0.25, -1.67, 0.63, 0.12, 1.29, 0.31),
+                 .Dim = c(4L, 2L))
+  expect_equal(as.vector(t(A)), drop(.get_cum_mat(4, 2) %*% as.vector(A)))
+  expect_equal(as.vector(A), drop(.get_cum_mat(2, 4) %*% as.vector(t(A))))
+})
+
+test_that("PF_EM gives the same with restricted and unrestricted model when we estimate all the parameters", {
+  skip_on_cran()
+
+  n_obs     <- 200L
+  n_periods <- 100L
+
+  # # function to find Q_0
+  # get_Q_0 <- function(Qmat, Fmat){
+  #   # see https://math.stackexchange.com/q/2854333/253239
+  #   eg  <- eigen(Fmat)
+  #   las <- eg$values
+  #   if(any(abs(las) >= 1))
+  #     stop("Divergent series")
+  #   U   <- eg$vectors
+  #   U_t <- t(U)
+  #   T.  <- crossprod(U, Qmat %*% U)
+  #   Z   <- T. / (1 - tcrossprod(las))
+  #   solve(U_t, t(solve(U_t, t(Z))))
+  # }
+  #
+  # Fmat <- matrix(c(.9, 0, 0, .9), 2)
+  # Rmat <- diag(1    , 2)
+  # Qmat <- diag(.33^2, 2)
+  # Q_0  <- get_Q_0(Qmat, Fmat)
+  # beta <- c(-6.5, -2)
+  #
+  # set.seed(54432125)
+  # betas <- matrix(nrow = n_periods + 1, ncol = 2)
+  # betas[1, ] <- rnorm(2) %*% chol(Q_0)
+  # for(i in 1:n_periods + 1)
+  #   betas[i, ] <- Fmat %*% betas[i - 1, ] + drop(rnorm(2) %*% chol(Qmat))
+  #
+  # betas <- t(t(betas) + beta)
+  #
+  # df <- replicate(n_obs, {
+  #   # left-censoring
+  #   tstart <- max(0L, sample.int((n_periods - 1L) * 2L, 1) - n_periods + 1L)
+  #
+  #   # covariates
+  #   x <- runif(1, -1, 1)
+  #   covars <- c(1, x)
+  #
+  #   # outcome (stop time and event indicator)
+  #   y <- FALSE
+  #   for(tstop in (tstart + 1L):n_periods){
+  #     fail_time <- rexp(1) / exp(covars %*% betas[tstop + 1L, ])
+  #     if(fail_time <= 1){
+  #       y <- TRUE
+  #       tstop <- tstop - 1L + fail_time
+  #       break
+  #     }
+  #   }
+  #
+  #   c(tstart = tstart, tstop = tstop, x = x, y = y)
+  # })
+  # df <- data.frame(t(df))
+  # saveRDS(df, "VAR_restrict_vs_non_data.RDS")
+  df <- readRDS("VAR_restrict_vs_non_data.RDS")
+
+  set.seed(seed <- 30520116)
+  pf_non_restrict_Fear <- suppressWarnings(PF_EM(
+    Surv(tstart, tstop, y) ~ x + ddFixed(x) + ddFixed_intercept(TRUE), df,
+    Q_0 = diag(1, 2), Q = diag(1, 2), Fmat = matrix(c(.1, 0, 0, .1), 2),
+    by = 1, type = "VAR", model = "exponential", max_T = n_periods,
+    control = PF_control(
+      N_fw_n_bw = 50, N_smooth = 100, N_first = 500, eps = .001,
+      method = "AUX_normal_approx_w_cloud_mean",
+      n_max = 3, smoother = "Fearnhead_O_N",
+      Q_tilde = diag(.3^2, 2), n_threads = 4)))
+
+  cl <- pf_non_restrict_Fear$call
+  cl[c("Q", "Fmat")] <- NULL
+  cl[c("G", "J", "K", "theta", "psi", "phi")] <- list(
+    G = diag(2^2), J = diag(2), K = diag(2 * (2 - 1) / 2),
+    theta = c(.1, 0, 0, .1), psi = c(0, 0), phi = 0)
+
+  set.seed(seed)
+  pf_restrict_Fear <- suppressWarnings(eval(cl))
+
+  expect_equal(
+    pf_non_restrict_Fear$F, pf_restrict_Fear$F, tolerance = 1e-6)
+  expect_equal(
+    pf_non_restrict_Fear$Q, pf_restrict_Fear$Q, tolerance = 1e-6)
+})
+
+test_that("type = 'VAR' works with non-zero mean for with a single term and gives previous results", {
+  # had somes issues when with an example like this
+  set.seed(30520116)
+  pf_Fear <- suppressWarnings(PF_EM(
+    Surv(start, stop, event) ~ ddFixed(group) + ddFixed_intercept(TRUE),
+    head_neck_cancer, Q_0 = 1, Q = .2, Fmat = diag(1e-2, 1),
+    by = 1, type = "VAR", model = "logit", max_T = 30,
+    control = PF_control(
+      N_fw_n_bw = 50, N_smooth = 100, N_first = 500, eps = .001,
+      method = "AUX_normal_approx_w_cloud_mean",
+      n_max = 2, smoother = "Fearnhead_O_N",
+      Q_tilde = diag(.3^2, 1), n_threads = 1)))
+
+  # old <- readRDS(file.path(
+  #    "previous_results", "PF_VARS_non_zero_mean_inter.RDS"))
+  expect_known_value(pf_Fear[!names(pf_Fear) %in% "clouds"],
+                     file = "PF_VARS_non_zero_mean_inter.RDS")
+
+  pf_Fear <- suppressWarnings(PF_EM(
+    Surv(start, stop, event) ~ group + ddFixed(group) + ddFixed_intercept(),
+    head_neck_cancer, Q_0 = 1, Q = .2, Fmat = diag(1e-2, 1),
+    by = 1, type = "VAR", model = "logit", max_T = 30,
+    control = PF_control(
+      N_fw_n_bw = 50, N_smooth = 100, N_first = 500, eps = .001,
+      method = "AUX_normal_approx_w_cloud_mean",
+      n_max = 2, smoother = "Fearnhead_O_N",
+      Q_tilde = diag(.3^2, 1), n_threads = 1)))
+
+  # old <- readRDS(file.path(
+  #    "previous_results", "PF_VARS_non_zero_mean_slope.RDS"))
+  expect_known_value(pf_Fear[!names(pf_Fear) %in% "clouds"],
+                     file = "PF_VARS_non_zero_mean_slope.RDS")
 })

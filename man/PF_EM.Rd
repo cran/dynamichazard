@@ -5,12 +5,14 @@
 \title{EM Estimation with Particle Filters and Smoothers}
 \usage{
 PF_EM(formula, data, model = "logit", by, max_T, id, a_0, Q_0, Q, order = 1,
-  control = PF_control(...), trace = 0, seed = NULL, ...)
+  control = PF_control(...), trace = 0, seed = NULL, type = "RW",
+  fixed = NULL, random = NULL, Fmat, fixed_effects, G, theta, J, K, psi,
+  phi, ...)
 }
 \arguments{
 \item{formula}{\code{\link[survival]{coxph}} like formula with \code{\link[survival]{Surv}(tstart, tstop, event)} on the left hand site of \code{~}.}
 
-\item{data}{\code{data.frame} or environment containing the outcome and co-variates.}
+\item{data}{\code{data.frame} or environment containing the outcome and covariates.}
 
 \item{model}{either \code{'logit'} for binary outcomes or \code{'exponential'} for piecewise constant exponential distributed arrival times.}
 
@@ -28,11 +30,34 @@ PF_EM(formula, data, model = "logit", by, max_T, id, a_0, Q_0, Q, order = 1,
 
 \item{order}{order of the random walk.}
 
-\item{control}{list of control variables (see the control section below).}
+\item{control}{see \code{\link{PF_control}}.}
 
 \item{trace}{argument to get progress information. Zero will yield no info and larger integer values will yield incrementally more information.}
 
-\item{seed}{seed to set at the start of every EM iteration.}
+\item{seed}{seed to set at the start of every EM iteration. See
+\code{\link{set.seed}}.}
+
+\item{type}{type of state model. Either \code{"RW"} for a [R]andom [W]alk or
+"VAR" for [V]ector [A]uto[R]egression.}
+
+\item{fixed}{two-sided \code{\link{formula}} to be used
+with \code{random} instead of \code{formula}. It is of the form
+\code{Surv(tstart, tstop, event) ~ x} or
+\code{Surv(tstart, tstop, event) ~ - 1} for no fixed effects.}
+
+\item{random}{one-sided \code{\link{formula}} to be used
+with \code{fixed} instead of \code{formula}. It is of the form
+\code{~ z}.}
+
+\item{Fmat}{starting value for \eqn{F} when \code{type = "VAR"}. See
+'Details'.}
+
+\item{fixed_effects}{starting values for fixed effects if any. See
+\code{\link{ddFixed}}.}
+
+\item{G, theta, J, K, psi, phi}{parameters for a restricted \code{type = "VAR"} model.
+See the vignette mentioned in 'Details' and the examples linked to in
+'See Also'.}
 
 \item{...}{optional way to pass arguments to \code{control}.}
 }
@@ -43,50 +68,66 @@ An object of class \code{PF_EM}.
 Method to estimate the hyper parameters with an EM algorithm.
 }
 \details{
+Estimates a state model of the form
+
+\deqn{\alpha_t = F \alpha_t + R\epsilon_t, \qquad \epsilon_t \sim N(0, Q)}
+
+where \eqn{F\in{\rm I\!R}^{p\times p}} has full rank,
+\eqn{\alpha_t\in {\rm I\!R}^p}, \eqn{\epsilon_t\in {\rm I\!R}^r},
+\eqn{r \leq p}, and \eqn{R = (e_{l_1},e_{l_2},\dots,e_{l_r})}
+where \eqn{e_k} is column from the \eqn{p} dimensional identity matrix and
+\eqn{l_1<l_2<\dots<l_r}. The time zero state is drawn from
+
+\deqn{\alpha_0\sim N(a_0, Q_0)}
+
+with \eqn{Q_0 \in {\rm I\!R}^{p\times p}}. The latent states,
+\eqn{\alpha_t}, are related to the output throught the linear predictors
+
+\deqn{\eta_{it} = X_t(R^+\alpha_t) + Z_t\beta}
+
+where \eqn{X_t\in{\rm I\!R}^{n_t\times r}} and
+\eqn{Z_t{\rm I\!R}^{n_t\times c}} are design matrices and the outcome for a
+individual \eqn{i} at time \eqn{t} is distributed according
+to an exponential family member given \eqn{\eta_{it}}. \eqn{\beta} are
+constant coefficients.
+
 See \code{vignette("Particle_filtering", "dynamichazard")} for details.
 }
+\section{Warning}{
+
+The function is still under development so the ouput and API may change.
+}
+
 \examples{
+\dontrun{
 #####
 # Fit model with lung data set from survival
-# Warning: this has a longer computation time
+# Warning: long-ish computation time
 
-\dontrun{
 library(dynamichazard)
 .lung <- lung[!is.na(lung$ph.ecog), ]
+# standardize
+.lung$age <- scale(.lung$age)
+
+# fit
 set.seed(43588155)
 pf_fit <- PF_EM(
- Surv(time, status == 2) ~ ph.ecog + age,
- data = .lung, by = 50, id = 1:nrow(.lung),
- Q_0 = diag(1, 3), Q = diag(1, 3),
- max_T = 800,
- control = PF_control(
-   N_fw_n_bw = 500,
-   N_first = 2500,
-   N_smooth = 2500,
-   n_max = 50,
-   n_threads = max(parallel::detectCores(logical = FALSE), 1)),
- trace = 1)
+Surv(time, status == 2) ~ ddFixed(ph.ecog) + age,
+data = .lung, by = 50, id = 1:nrow(.lung),
+Q_0 = diag(1, 2), Q = diag(.5^2, 2),
+max_T = 800,
+control = PF_control(
+  N_fw_n_bw = 500, N_first = 2500, N_smooth = 5000,
+  n_max = 50, eps = .001, Q_tilde = diag(.2^2, 2), est_a_0 = FALSE,
+  n_threads = max(parallel::detectCores(logical = FALSE), 1)))
 
 # Plot state vector estimates
 plot(pf_fit, cov_index = 1)
 plot(pf_fit, cov_index = 2)
-plot(pf_fit, cov_index = 3)
 
 # Plot log-likelihood
 plot(pf_fit$log_likes)
 }
-
-#####
-# Can be compared with this example from ?coxph in R 3.4.1. Though, the above
-# only has a linear effect for age
-
-\dontrun{
-cox <- coxph(
- Surv(time, status) ~ ph.ecog + tt(age), data= .lung,
- tt=function(x,t,...) pspline(x + t/365.25))
-cox}
-
-
 \dontrun{
 ######
 # example with fixed effects
@@ -114,28 +155,175 @@ ddfit <- ddhazard(
    ddFixed(edema) + ddFixed(log_albumin) + ddFixed(log_protime) + log_bili,
  pbc2, Q_0 = 100, Q = 1e-2, by = 100, id = pbc2$id,
  model = "exponential", max_T = 3600,
- control = list(eps = 1e-5, NR_eps = 1e-4, n_max = 1e4))
+ control = ddhazard_control(eps = 1e-5, NR_eps = 1e-4, n_max = 1e4))
 summary(ddfit)
 
 # fit model with particle filter
 set.seed(88235076)
-ppfit <- PF_EM(
- Surv(tstart, tstop, death == 2) ~ ddFixed_intercept() + ddFixed(age) +
-   ddFixed(edema) + ddFixed(log_albumin) + ddFixed(log_protime) + log_bili,
- pbc2, Q_0 = 100, Q = ddfit$Q * 100, # use estimate from before
- by = 100, id = pbc2$id,
- model = "exponential", max_T = 3600,
- control = PF_control(
-   N_fw_n_bw = 250, N_smooth = 500, N_first = 1000, eps = 1e-3,
-   method = "AUX_normal_approx_w_cloud_mean",
-   n_max = 25, # just take a few iterations as an example
-   n_threads = max(parallel::detectCores(logical = FALSE), 1), trace = TRUE)
+pf_fit <- PF_EM(
+  Surv(tstart, tstop, death == 2) ~ ddFixed_intercept() + ddFixed(age) +
+    ddFixed(edema) + ddFixed(log_albumin) + ddFixed(log_protime) + log_bili,
+  pbc2, Q_0 = 2^2, Q = ddfit$Q * 100, # use estimate from before
+  by = 100, id = pbc2$id,
+  model = "exponential", max_T = 3600,
+  control = PF_control(
+    N_fw_n_bw = 500, N_smooth = 2500, N_first = 1000, eps = 1e-3,
+    method = "AUX_normal_approx_w_cloud_mean", est_a_0 = FALSE,
+    Q_tilde = as.matrix(.1^2),
+    n_max = 25, # just take a few iterations as an example
+    n_threads = max(parallel::detectCores(logical = FALSE), 1)))
 
 # compare results
 plot(ddfit)
-plot(ppfit)
+plot(pf_fit)
 sqrt(ddfit$Q * 100)
-sqrt(ppfit$Q)
-rbind(ddfit$fixed_effects, ppfit$fixed_effects)
+sqrt(pf_fit$Q)
+rbind(ddfit$fixed_effects, pf_fit$fixed_effects)
 }
+\dontrun{
+#####
+# simulation example with `random` and `fixed` argument and a restricted
+# model
+
+# g groups with k individuals in each
+g <- 3L
+k <- 400L
+
+# matrices for state equation
+p <- g + 1L
+G <- matrix(0., p^2, 2L)
+for(i in 1:p)
+  G[i + (i - 1L) * p, 1L + (i == p)] <- 1L
+
+theta <- c(.9, .8)
+# coefficients in transition density
+(F. <- matrix(as.vector(G \%*\% theta), 4L, 4L))
+
+J <- matrix(0., ncol = 2L, nrow = p)
+J[-p, 1L] <- J[p, 2L] <- 1
+psi <- c(log(c(.3, .1)))
+
+K <- matrix(0., p * (p - 1L) / 2L, 2L)
+j <- 0L
+for(i in (p - 1L):1L){
+  j <- j + i
+  K[j, 2L] <- 1
+}
+K[K[, 2L] < 1, 1L] <- 1
+phi <- log(-(c(.8, .3) + 1) / (c(.8, .3) - 1))
+
+V <- diag(exp(drop(J \%*\% psi)))
+C <- diag(1, ncol(V))
+C[lower.tri(C)] <- 2/(1 + exp(-drop(K \%*\% phi))) - 1
+C[upper.tri(C)] <- t(C)[upper.tri(C)]
+(Q <- V \%*\% C \%*\% V)     # covariance matrix in transition density
+cov2cor(Q)
+
+Q_0 <- get_Q_0(Q, F.)    # time-invariant covariance matrix
+beta <- c(rep(-6, g), 0) # all groups have the same long run mean intercept
+
+# simulate state variables
+set.seed(56219373)
+n_periods <- 300L
+alphas <- matrix(nrow = n_periods + 1L, ncol = p)
+alphas[1L, ] <- rnorm(p) \%*\% chol(Q_0)
+for(i in 1:n_periods + 1L)
+  alphas[i, ] <- F. \%*\% alphas[i - 1L, ] + drop(rnorm(p) \%*\% chol(Q))
+
+alphas <- t(t(alphas) + beta)
+
+# plot state variables
+matplot(alphas, type = "l", lty = 1)
+
+# simulate individuals' outcome
+n_obs <- g * k
+df <- lapply(1:n_obs, function(i){
+  # find the group
+  grp <- (i - 1L) \%/\% (n_obs / g) + 1L
+
+  # left-censoring
+  tstart <- max(0L, sample.int((n_periods - 1L) * 2L, 1) - n_periods + 1L)
+
+  # covariates
+  x <- c(1, rnorm(1))
+
+  # outcome (stop time and event indicator)
+  osa <- NULL
+  oso <- NULL
+  osx <- NULL
+  y <- FALSE
+  for(tstop in (tstart + 1L):n_periods){
+    sigmoid <- 1 / (1 + exp(- drop(x \%*\% alphas[tstop + 1L, c(grp, p)])))
+    if(sigmoid > runif(1)){
+      y <- TRUE
+      break
+    }
+    if(.01 > runif(1L) && tstop < n_periods){
+      # sample new covariate
+      osa <- c(osa, tstart)
+      tstart <- tstop
+      oso <- c(oso, tstop)
+      osx <- c(osx, x[2])
+      x[2] <- rnorm(1)
+    }
+  }
+
+  cbind(
+    tstart = c(osa, tstart), tstop = c(oso, tstop),
+    x = c(osx, x[2]), y = c(rep(FALSE, length(osa)), y), grp = grp,
+    id = i)
+})
+df <- data.frame(do.call(rbind, df))
+df$grp <- factor(df$grp)
+
+# fit model. Start with "cheap" iterations
+fit <- PF_EM(
+  fixed = Surv(tstart, tstop, y) ~ x, random = ~ grp + x - 1,
+  data = df, model = "logit", by = 1L, max_T = max(df$tstop),
+  Q_0 = diag(1.5^2, p), id = df$id, type = "VAR",
+  G = G, theta = c(.5, .5), J = J, psi = log(c(.1, .1)),
+  K = K, phi = log(-(c(.4, 0) + 1) / (c(.4, 0) - 1)),
+  control = PF_control(
+    N_fw_n_bw = 100L, N_smooth = 100L, N_first = 500L,
+    method = "AUX_normal_approx_w_cloud_mean",
+    Q_tilde = diag(.05^2, p),
+    n_max = 100L,  # should maybe be larger
+    smoother = "Fearnhead_O_N", eps = 1e-4,
+    n_threads = 4L # depends on your cpu(s)
+  ),
+  trace = 1L)
+plot(fit$log_likes) # log-likelihood approximation at each iterations
+
+# take more iterations with more particles
+cl <- fit$call
+ctrl <- cl[["control"]]
+ctrl[c("N_fw_n_bw", "N_smooth", "N_first", "n_max")] <- list(
+  400L, 1000L, 1000L, 25L)
+cl[["control"]] <- ctrl
+cl[c("phi", "psi", "theta")] <- list(fit$phi, fit$psi, fit$theta)
+fit_extra <- eval(cl)
+
+plot(fit_extra$log_likes) # log-likelihood approximation at each iteration
+
+# check estimates
+sqrt(diag(fit_extra$Q))
+sqrt(diag(Q))
+cov2cor(fit_extra$Q)
+cov2cor(Q)
+fit_extra$F
+F.
+
+# plot predicted state variables
+for(i in 1:p){
+  plot(fit_extra, cov_index = i)
+  abline(h = 0, lty = 2)
+  lines(1:nrow(alphas) - 1, alphas[, i] - beta[i], lty = 3)
+}
+}
+}
+\seealso{
+\code{\link{PF_forward_filter}} to get a more precise estimate of
+the final log-likelihood.
+
+See the examples at https://github.com/boennecd/dynamichazard/tree/master/examples.
 }

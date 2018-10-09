@@ -5,8 +5,8 @@ result <- ddhazard(
   formula = survival::Surv(start, stop, event) ~ group,
   data = head_neck_cancer,
   by = 1,
-  control = list(est_Q_0 = F,
-                 save_data = F, save_risk_set = F),
+  control = ddhazard_control(
+    est_Q_0 = F, save_data = F, save_risk_set = F),
   a_0 = rep(0, 2), Q_0 = diag(100000, 2), Q = diag(0.01, 2),
   max_T = 45,
   id = head_neck_cancer$id, order = 1)
@@ -23,7 +23,7 @@ test_that("Invalid penalty terms throw error", {
       formula = survival::Surv(start, stop, event) ~ group,
       data = head_neck_cancer,
       by = 1, # Use by month intervals
-      control = list(denom_term = 0)),
+      control = ddhazard_control(denom_term = 0)),
     regexp = "Method not implemented with penalty term 'control\\$denom_term' equal to 0")
 
   expect_error(
@@ -31,48 +31,49 @@ test_that("Invalid penalty terms throw error", {
       formula = survival::Surv(start, stop, event) ~ group,
       data = head_neck_cancer,
       by = 1, # Use by month intervals
-      control = list(denom_term = -1)),
+      control = ddhazard_control(denom_term = -1)),
     regexp = "Method not implemented with penalty term 'control\\$denom_term' equal to -1")
 })
 
 test_that("Get expected warning when no Q or Q_0 is passed", {
-  args <- list(
+  cl <- quote(ddhazard(
     formula = survival::Surv(start, stop, event) ~ group,
     data = head_neck_cancer,
     by = 1,
-    control = list(est_Q_0 = F,
-                   save_data = F, save_risk_set = F),
+    control = ddhazard_control(
+      est_Q_0 = F, save_data = F, save_risk_set = F),
     a_0 = rep(0, 2), Q_0 = diag(100000, 2), Q = diag(0.01, 2),
     max_T = 45,
-    id = head_neck_cancer$id, order = 1)
+    id = head_neck_cancer$id, order = 1))
 
-  tmp <- args
+  tmp <- cl
   tmp$Q_0 <- NULL
   expect_warning(
-    do.call(ddhazard, tmp),
+    eval(tmp),
     paste(sQuote("Q_0"), "not supplied. It has been set to a diagonal matrix with diagonal entries equal to"))
 
-  tmp <- args
+  tmp <- cl
   tmp$Q <- NULL
   expect_warning(
-    do.call(ddhazard, tmp),
+    eval(tmp),
     paste(sQuote("Q"), "not supplied. It has been set to a diagonal matrix with diagonal entries equal to"))
 })
 
 
 
-test_that("Changing convergence criteria change output",{
-  arg_list <- list(
+test_that("Changing convergence criteria change output", {
+  ctrl <- ddhazard_control(criteria = "delta_coef", eps = .002)
+  cl <- quote(ddhazard(
     formula = survival::Surv(stop, event) ~ group,
     data = head_neck_cancer,
     by = 1, # Use by month intervals
     id = head_neck_cancer$id,
     Q_0 = diag(1e5, 2), Q = diag(.1, 2),
-    control = list(criteria = "delta_coef", eps = .002))
+    control = ctrl))
 
-  suppressMessages(res1 <- do.call(ddhazard, arg_list))
-  arg_list$control$criteria <- "delta_likeli"
-  suppressMessages(res2 <- do.call(ddhazard, arg_list))
+  suppressMessages(res1 <- eval(cl))
+  ctrl$criteria <- "delta_likeli"
+  suppressMessages(res2 <- eval(cl))
 
   expect_true(res1$n_iter != res2$n_iter)
 })
@@ -91,8 +92,8 @@ test_that("exponential model and logit moels hazzard functions differs", {
     formula = survival::Surv(start, stop, event) ~ group,
     data = head_neck_cancer,
     by = 1,
-    control = list(est_Q_0 = F,
-                   save_data = F, save_risk_set = F),
+    control = ddhazard_control(
+      est_Q_0 = F, save_data = F, save_risk_set = F),
     a_0 = rep(0, 2), Q_0 = diag(100000, 2), Q = diag(0.01, 2),
     max_T = 45,
     id = head_neck_cancer$id, order = 1)
@@ -129,8 +130,36 @@ test_that("Unmacthed control variable throw error",
               a_0 = rep(0, 2), Q_0 = diag(1, 2), # Initial value
               max_T = 45,
               id = head_neck_cancer$id, order = 1,
-              control = list(None_existing_parem = 1)
-            )}, regexp = "These control parameters are not recognized"))
+              control = ddhazard_control(None_existing_parem = 1)
+            )}, regexp = "Unused arguments passed to 'ddhazard_control'"))
+
+test_that("Various ways of passing control gives the same but some with warnings", {
+  cl <- quote(ddhazard(
+    formula = survival::Surv(start, stop, event) ~ group,
+    data = head_neck_cancer,
+    by = 1,
+    control = list(est_Q_0 = F, save_data = F),
+    a_0 = rep(0, 2), Q_0 = diag(100000, 2), Q = diag(0.01, 2),
+    max_T = 45,
+    id = head_neck_cancer$id, order = 1))
+
+  expect_warning(
+    f1 <- eval(cl),
+    "'ddhazard_control' instead of 'list' to the 'control' argument")
+
+  ctrl <- eval(cl$control)
+  cl$control <- quote(ctrl)
+  expect_silent(f2 <- eval(cl))
+  expect_equal(f1[names(f1) != "call"], f2[names(f2) != "call"])
+
+  cl$control <- quote(ddhazard_control(est_Q_0 = F, save_data = F))
+  expect_silent(f3 <- eval(cl))
+  expect_equal(f1[names(f1) != "call"], f3[names(f3) != "call"])
+
+  cl$control <- ddhazard_control(est_Q_0 = F, save_data = F)
+  expect_silent(f4 <- eval(cl))
+  expect_equal(f1[names(f1) != "call"], f4[names(f4) != "call"])
+})
 
 test_that("Different non-integer time_scales gives the same result with ddhazard", {
   skip_on_cran()
@@ -141,7 +170,7 @@ test_that("Different non-integer time_scales gives the same result with ddhazard
       formula = survival::Surv(start * .by, stop * .by, event) ~ group,
       data = head_neck_cancer,
       by = .by,
-      control = list(est_Q_0 = F, save_data = F),
+      control = ddhazard_control(est_Q_0 = F, save_data = F),
       a_0 = rep(0, 2), Q_0 = diag(1e2, 2), Q = diag(1e-2 / .by, 2),
       id = head_neck_cancer$id, order = 1))
 
@@ -158,22 +187,23 @@ test_that("Different non-integer time_scales gives the same result with ddhazard
 
 test_that(
   "Old expoential models gives the same results and yields expected message", {
-    args <- list(
+    cl <- quote(ddhazard(
       formula = survival::Surv(start, stop, event) ~ group,
       data = head_neck_cancer,
       by = 1, Q_0 = diag(10000, 2),
       Q = diag(1e-3, 2), a_0 = c(0, 0),
       max_T = 30,
-      id = head_neck_cancer$id, order = 1, control = list(eps = .1))
+      id = head_neck_cancer$id, order = 1,
+      control = ddhazard_control(eps = .1)))
 
-    args$model <- "exponential"
-    expect_silent(f1 <- do.call(ddhazard, args))
+    cl$model <- "exponential"
+    expect_silent(f1 <- eval(cl))
 
     for(m in c("exp_bin", "exp_clip_time", "exp_clip_time_w_jump")){
       eval(bquote({
-        args$model <- .(m)
+        cl$model <- .(m)
         expect_message(
-          f2 <- do.call(ddhazard, args),
+          f2 <- eval(cl),
           .(paste0(".", m, ". is not used after version 0\\.5\\.0\\.")))
         expect_equal(f1[c("state_vars", "state_vecs")],
                      f2[c("state_vars", "state_vecs")],
@@ -183,24 +213,48 @@ test_that(
 
   })
 
+test_that("est_a_0 fixes the time zero value", {
+  # TODO: make a smarter way to test this...
+  sink(tmp_file <- tempfile())
+  tryCatch({
+    res <- ddhazard(
+      formula = survival::Surv(start, stop, event) ~ group,
+      data = head_neck_cancer,
+      by = 1, Q_0 = diag(10000, 2),
+      Q = diag(1e-3, 2), a_0 = c(0, 0),
+      max_T = 30, control = ddhazard_control(est_a_0 = FALSE, debug = TRUE),
+      id = head_neck_cancer$id, order = 1,
+      model = "logit")
+
+    log_f <- paste0(readLines(tmp_file), collapse = "\n")
+    expect_true(grepl(
+      "it\\s+1,\\ Starting EM:\\ a_0\\n[^\\n]+\\s+0\\s+0", log_f, perl = TRUE))
+    expect_true(grepl(
+      paste0("it\\s+", res$n_iter - 1L,
+             ",\\ Starting EM:\\ a_0\\n[^\\n]+\\s+0\\s+0"), log_f,
+      perl = TRUE))
+  }, finally = {
+    sink()
+    unlink(tmp_file)
+  })
+})
+
 ########
 # Test on simulated data
 
 test_that("Result of exponential model gives previous results w/ simulated data", {
-  args <- list(
+  result_exp <- ddhazard(
     formula = survival::Surv(tstart, tstop, event) ~ . - id - tstart - tstop - event,
     data = exp_sim_500$res,
     by = 1,
     Q_0 = diag(1e5, 11),
     Q = diag(1e-3, 11),
-    control = list(
+    control = ddhazard_control(
       save_data = F, save_risk_set = F,
       method = "EKF"),
     max_T = 10,
     id = exp_sim_500$res$id, order = 1,
     model = "exponential")
-
-  result_exp <- do.call(ddhazard, args)
 
   # matplot(exp_sim_500$betas, type = "l", lty = 1)
   # matplot(result_exp$state_vecs, lty = 2, type = "l", add = T)
@@ -211,42 +265,40 @@ test_that("Result of exponential model gives previous results w/ simulated data"
 
 
 test_that("Permutating data does not change the results", {
-  args <- list(
+  cl <- quote(ddhazard(
     Surv(stop, event) ~ group, head_neck_cancer,
     by = 1, max_T = 40,
-    Q_0 = diag(rep(10000, 2)), Q = diag(rep(0.1, 2)))
+    Q_0 = diag(rep(10000, 2)), Q = diag(rep(0.1, 2))))
 
-  r1 <- do.call(ddhazard, args)
-
-  args$control <- c(args$control, list(permu = T))
-
-  r2 <- do.call(ddhazard, args)
+  r1 <- eval(cl)
+  cl$control <- quote(ddhazard_control(permu = T))
+  r2 <- eval(cl)
 
   # plot(r1)
   # plot(r2)
 
   expect_equal(r1$state_vecs, r2$state_vecs)
-  expect_true(is.character(
-    all.equal(r1$state_vecs, r2$state_vecs,tolerance = 1e-16)))
+  expect_true(!isTRUE(all.equal(
+    r1$state_vecs, r2$state_vecs,tolerance = 1e-16)))
 
   #####
   # With fixed effects
-  args <- list(
+  cl <- quote(ddhazard(
     Surv(tstart, tstop, death == 2) ~ age + ddFixed(edema) +
       log(albumin) + log(protime) + log(bili), pbc2,
     id = pbc2$id, by = 100, max_T = 3600,
     Q_0 = diag(rep(10000, 5)), Q = diag(rep(0.001, 5)),
-    control = list(n_threads = 1))
+    control = ddhazard_control(n_threads = 1)))
 
-  r1 <- do.call(ddhazard, args)
-  args$control <- c(args$control, list(permu = T))
-  r2 <- do.call(ddhazard, args)
+  r1 <- eval(cl)
+  cl$control <- quote(ddhazard_control(n_threads = 1, permu = TRUE))
+  r2 <- eval(cl)
 
   # plot(r1)
   # plot(r2)
 
   expect_equal(r1$state_vecs, r2$state_vecs)
-  expect_true(is.character(
+  expect_true(!isTRUE(
     all.equal(r1$state_vecs, r2$state_vecs,tolerance = 1e-16)))
 
   #####
@@ -254,17 +306,17 @@ test_that("Permutating data does not change the results", {
   set.seed(94884214)
   w <- sample(1:3, nrow(pbc2), replace = T)
 
-  args <- list(
+  cl <- quote(ddhazard(
     Surv(tstart, tstop, death == 2) ~ age + edema +
       log(albumin) + log(protime) + log(bili), pbc2,
     id = pbc2$id, by = 100, max_T = 3000,
     weights = w,
     Q_0 = diag(rep(10000, 6)), Q = diag(rep(0.001, 6)),
-    control = list(n_threads = 1, LR = .6))
+    control = ddhazard_control(n_threads = 1, LR = .6)))
 
-  r1 <- do.call(ddhazard, args)
-  args$control <- c(args$control, list(permu = T))
-  r2 <- do.call(ddhazard, args)
+  r1 <- eval(cl)
+  cl$control <- quote(ddhazard_control(n_threads = 1, LR = .6, permu = TRUE))
+  r2 <- eval(cl)
 
   # plot(r1)
   # plot(r2)

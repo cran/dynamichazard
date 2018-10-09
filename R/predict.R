@@ -32,7 +32,7 @@
 #' fit <- ddhazard(
 #'  Surv(time, status == 2) ~ log(bili), pbc, id = pbc$id, max_T = 3600,
 #'  Q_0 = diag(1, 2), Q = diag(1e-4, 2), by = 50,
-#'  control = list(method = "GMA"))
+#'  control = ddhazard_control(method = "GMA"))
 #' predict(fit, type = "response", new_data =
 #'  data.frame(time = 0, status = 2, bili = 3))
 #' predict(fit, type = "term", new_data =
@@ -52,6 +52,7 @@ predict.ddhazard = function(object, new_data,
   # TODO: change the code below to use terms object which has been added in
   #       in version 0.5.0 to get the index of potential fixed effects
   tmp = get_design_matrix(
+    formula = object$formula,
     data = new_data, response = F, Terms = object$terms, xlev = object$xlev,
     has_fixed_intercept = object$has_fixed_intercept)
   object$formula <- tmp$formula_used

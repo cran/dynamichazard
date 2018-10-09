@@ -106,7 +106,7 @@ dd_rossi <- ddhazard(
   Surv(start, stop, event) ~ fin + age + prio + employed.cumsum, 
   data = Rossi, id = Rossi$id, by = 1, max_T = 52, 
   Q_0 = diag(10000, 5), Q = diag(.01, 5),
-  control = list(eps = .001, n_max = 250))
+  control = ddhazard_control(eps = .001, n_max = 250))
 
 ## ------------------------------------------------------------------------
 plot(dd_rossi)
@@ -198,7 +198,7 @@ dd_rossi_trans <- ddhazard(
   Surv(start, stop, event) ~ fin + age + log(prio + 1) + employed.cumsum, 
   data = Rossi, id = Rossi$id, by = 1, max_T = 52, 
   Q_0 = diag(10000, 5), Q = diag(.01, 5), 
-  control = list(eps = .001, n_max = 250))
+  control = ddhazard_control(eps = .001, n_max = 250))
 
 plot(dd_rossi_trans)
 
@@ -235,13 +235,13 @@ f1 <- ddhazard(
   Surv(start, stop, event) ~ fin + age + prio + employed.cumsum, 
   data = Rossi, id = Rossi$id, by = 1, max_T = 52, 
   Q_0 = diag(10000, 5), Q = diag(.01, 5), 
-  control = list(eps = .001, n_max = 250))
+  control = ddhazard_control(eps = .001, n_max = 250))
 
 f2 <- ddhazard(
   Surv(start, stop, event) ~ fin + age + log(prio + 1) + employed.cumsum , 
   data = Rossi, id = Rossi$id, by = 1, max_T = 52, 
   Q_0 = diag(10000, 5), Q = diag(.01, 5), 
-  control = list(eps = .001, n_max = 250))
+  control = ddhazard_control(eps = .001, n_max = 250))
 
 # Compute residuals
 res1 <- residuals(f1, type = "pearson")
@@ -281,7 +281,7 @@ dd_whas <- ddhazard(
   Surv(lenfol, fstat) ~ gender + age + bmi + hr + cvd,
   data = whas500, by = 100, max_T = 2000, 
   Q_0 = diag(10000, 6), Q = diag(.1, 6),
-  control = list(eps = .001))
+  control = ddhazard_control(eps = .001))
 
 plot(dd_whas)
 
@@ -290,7 +290,7 @@ dd_whas <- ddhazard(
   Surv(lenfol, fstat) ~ age + bmi + hr + cvd,
   data = whas500, by = 100, max_T = 2000, 
   Q_0 = diag(10000, 5), Q = diag(.1, 5), 
-  control = list(eps = .001))
+  control = ddhazard_control(eps = .001))
 
 plot(dd_whas)
 
@@ -299,7 +299,7 @@ dd_whas_no_age <- ddhazard(
   Surv(lenfol, fstat) ~ bmi + hr + cvd,   # No age
   data = whas500, by = 100, max_T = 1700, 
   Q_0 = diag(10000, 4), Q = diag(.1, 4), 
-  control = list(eps = .001))
+  control = ddhazard_control(eps = .001))
 
 plot(dd_whas_no_age)
 
@@ -454,7 +454,7 @@ f1 <- ddhazard(
   Surv(tstart, tstop, event) ~ x1 + x2 + x3,
   sim_dat$res, by = 1, max_T = 20, id = sim_dat$res$id, 
   Q_0 = diag(10000, 4), Q = diag(.1, 4), 
-  control = list(eps = .001))
+  control = ddhazard_control(eps = .001))
 
 matplot(betas, col = cols, lty = 1, type = "l")
 matplot(f1$state_vecs, col = cols, lty = 2, type = "l", add = T)
@@ -496,7 +496,7 @@ for(i in 1:3){
     Surv(tstart, tstop, event) ~ x1 + x2 + x3,
     sim_dat$res, by = 1, max_T = 20, id = sim_dat$res$id, 
     Q_0 = diag(10000, 4), Q = diag(.1, 4), 
-    control = list(eps = .001))
+    control = ddhazard_control(eps = .001))
   
   # Plot coefficients
   matplot(betas, col = cols, lty = 1, type = "l",
@@ -578,7 +578,7 @@ dd_whas <- ddhazard(
   Surv(lenfol, fstat) ~ age + bmi + hr + cvd,
   data = whas500, by = 100, max_T = 1700, 
   Q_0 = diag(10000, 5), Q = diag(.1, 5), 
-  control = list(eps = .001))
+  control = ddhazard_control(eps = .001))
 
 dd_whas_no_extreme <- ddhazard(
   Surv(lenfol, fstat) ~ age + bmi + hr + cvd,
