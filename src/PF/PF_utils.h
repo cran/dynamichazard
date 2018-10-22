@@ -148,8 +148,8 @@ input_for_normal_apprx_w_cloud_mean
 /* ------------------------------------------- */
 
 struct input_for_normal_apprx_w_particle_mean_element {
-  arma::vec mu;
-  arma::vec xi;
+  arma::vec mu; /*        \hat x_t */
+  arma::vec xi; /* R^\top \hat x_t */
   arma::mat sigma_chol_inv;
   arma::mat sigma;
 };
@@ -232,6 +232,10 @@ Rcpp::List get_rcpp_list_from_cloud(
     const unsigned int state_dim, const PF_data *data = nullptr);
 
 smoother_output get_clouds_from_rcpp_list(const Rcpp::List &rcpp_list);
+
+/* ------------------------------------------- */
+
+cloud re_sample_cloud(const unsigned int, const cloud);
 
 #undef USE_PRIOR_IN_BW_FILTER_DEFAULT
 #undef MAX

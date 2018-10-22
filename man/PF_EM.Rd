@@ -50,14 +50,14 @@ with \code{fixed} instead of \code{formula}. It is of the form
 \code{~ z}.}
 
 \item{Fmat}{starting value for \eqn{F} when \code{type = "VAR"}. See
-'Details'.}
+'Details' in \code{\link{PF_EM}}.}
 
 \item{fixed_effects}{starting values for fixed effects if any. See
 \code{\link{ddFixed}}.}
 
 \item{G, theta, J, K, psi, phi}{parameters for a restricted \code{type = "VAR"} model.
-See the vignette mentioned in 'Details' and the examples linked to in
-'See Also'.}
+See the vignette mentioned in 'Details' of \code{\link{PF_EM}} and the
+examples linked to in 'See Also'.}
 
 \item{...}{optional way to pass arguments to \code{control}.}
 }
@@ -81,7 +81,7 @@ where \eqn{e_k} is column from the \eqn{p} dimensional identity matrix and
 \deqn{\alpha_0\sim N(a_0, Q_0)}
 
 with \eqn{Q_0 \in {\rm I\!R}^{p\times p}}. The latent states,
-\eqn{\alpha_t}, are related to the output throught the linear predictors
+\eqn{\alpha_t}, are related to the output through the linear predictors
 
 \deqn{\eta_{it} = X_t(R^+\alpha_t) + Z_t\beta}
 
@@ -95,7 +95,7 @@ See \code{vignette("Particle_filtering", "dynamichazard")} for details.
 }
 \section{Warning}{
 
-The function is still under development so the ouput and API may change.
+The function is still under development so the output and API may change.
 }
 
 \examples{
@@ -112,14 +112,14 @@ library(dynamichazard)
 # fit
 set.seed(43588155)
 pf_fit <- PF_EM(
-Surv(time, status == 2) ~ ddFixed(ph.ecog) + age,
-data = .lung, by = 50, id = 1:nrow(.lung),
-Q_0 = diag(1, 2), Q = diag(.5^2, 2),
-max_T = 800,
-control = PF_control(
-  N_fw_n_bw = 500, N_first = 2500, N_smooth = 5000,
-  n_max = 50, eps = .001, Q_tilde = diag(.2^2, 2), est_a_0 = FALSE,
-  n_threads = max(parallel::detectCores(logical = FALSE), 1)))
+ Surv(time, status == 2) ~ ddFixed(ph.ecog) + age,
+ data = .lung, by = 50, id = 1:nrow(.lung),
+ Q_0 = diag(1, 2), Q = diag(.5^2, 2),
+ max_T = 800,
+ control = PF_control(
+    N_fw_n_bw = 500, N_first = 2500, N_smooth = 5000,
+    n_max = 50, eps = .001, Q_tilde = diag(.2^2, 2), est_a_0 = FALSE,
+    n_threads = max(parallel::detectCores(logical = FALSE), 1)))
 
 # Plot state vector estimates
 plot(pf_fit, cov_index = 1)
@@ -130,7 +130,7 @@ plot(pf_fit$log_likes)
 }
 \dontrun{
 ######
-# example with fixed effects
+# example with fixed intercept
 
 # prepare data
 temp <- subset(pbc, id <= 312, select=c(id, sex, time, status, edema, age))
@@ -286,8 +286,8 @@ fit <- PF_EM(
   control = PF_control(
     N_fw_n_bw = 100L, N_smooth = 100L, N_first = 500L,
     method = "AUX_normal_approx_w_cloud_mean",
-    Q_tilde = diag(.05^2, p),
-    n_max = 100L,  # should maybe be larger
+    nu = 5L, # sample from multivariate t-distribution
+    n_max = 50L,  # should maybe be larger
     smoother = "Fearnhead_O_N", eps = 1e-4,
     n_threads = 4L # depends on your cpu(s)
   ),
@@ -297,8 +297,8 @@ plot(fit$log_likes) # log-likelihood approximation at each iterations
 # take more iterations with more particles
 cl <- fit$call
 ctrl <- cl[["control"]]
-ctrl[c("N_fw_n_bw", "N_smooth", "N_first", "n_max")] <- list(
-  400L, 1000L, 1000L, 25L)
+ctrl[c("N_fw_n_bw", "N_smooth", "N_smooth_final", "N_first", "n_max")] <- list(
+  500L, 2000L, 500L, 5000L, 30L)
 cl[["control"]] <- ctrl
 cl[c("phi", "psi", "theta")] <- list(fit$phi, fit$psi, fit$theta)
 fit_extra <- eval(cl)

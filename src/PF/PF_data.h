@@ -282,12 +282,12 @@ public:
 class PF_data : public problem_data {
   using uword = arma::uword;
 
-  /* Objects used to compute P(\alpha_t \vert \alpha_{t - 1}) */
+  /* Objects used to compute P(\alpha_t \vert \alpha_{t + 1}) */
   std::map<const uword, const std::unique_ptr<linear_mapper>> bw_mean_maps;
   std::map<const uword, const arma::vec> bw_mean_const_term;
   std::map<const uword, const covarmat> bw_covar_map;
 
-  /* Pre-computed objects for the artificial prior */
+  /* Pre-computed objects for backward filter's */
   std::map<const uword, const arma::vec> uncond_means;
   std::map<const uword, const covarmat>  uncond_covarmats;
 
@@ -349,19 +349,21 @@ public:
   /* Number of paprticles in forward and/or backward filter */
   const uword N_fw_n_bw;
   const uword N_smooth;
+  const uword N_smooth_final;
   const double forward_backward_ESS_threshold;
 
   /* Inital state, number of particles to draw at time 0 and d + 1 and debug level */
   const arma::vec &a_0;
   const unsigned int debug; /* < 1 is no info and greater values yields more info */
   const uword N_first;
+  const int nu;
   const unsigned long work_block_size;
 
   /* pre-computed factorization */
   const covarmat Q;
   const covarmat Q_0;
-  const covarmat Q_proposal;
-  const covarmat Q_proposal_state;
+  const covarmat Q_proposal_xtra;
+  const covarmat Q_proposal_xtra_state;
 
   PF_data(const int n_fixed_terms_in_state_vec,
           arma::mat &X,
@@ -383,16 +385,16 @@ public:
           const arma::mat Q_tilde,
           const uword N_fw_n_bw,
           const uword N_smooth,
+          const uword N_smooth_final,
           Rcpp::Nullable<Rcpp::NumericVector> forward_backward_ESS_threshold,
           const unsigned int debug,
-          const uword N_first) :
+          const uword N_first, const int nu) :
     problem_data(
       n_fixed_terms_in_state_vec,
       X, fixed_terms, tstart, tstop, is_event_in_bin, a_0, R, L, Q_0, Q,
       risk_obj, F, n_max, n_threads, fixed_parems),
 
-      N_fw_n_bw(N_fw_n_bw),
-      N_smooth(N_smooth),
+      N_fw_n_bw(N_fw_n_bw), N_smooth(N_smooth), N_smooth_final(N_smooth_final),
       forward_backward_ESS_threshold(
         forward_backward_ESS_threshold.isNotNull() ?
           Rcpp::as<Rcpp::NumericVector>(forward_backward_ESS_threshold)[0] :
@@ -400,13 +402,13 @@ public:
 
       a_0(a_0),
       debug(debug),
-      N_first(N_first),
+      N_first(N_first), nu(nu),
       work_block_size(500),
 
       Q(Q),
       Q_0(Q_0),
-      Q_proposal(Q_tilde),
-      Q_proposal_state(err_state->map(Q_tilde).sv)
+      Q_proposal_xtra(Q_tilde),
+      Q_proposal_xtra_state(err_state->map(Q_tilde).sv)
     {
 #ifdef _OPENMP
       omp_init_lock(&PF_logger::lock);

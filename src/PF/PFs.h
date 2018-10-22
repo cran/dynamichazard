@@ -10,7 +10,9 @@
 
 class PF_base {
 protected:
-  static void debug_msg_after_weighting(const PF_data &data, cloud &cl){
+  static void debug_msg_after_weighting(
+      const PF_data &data, cloud &cl, const bool have_resampled = false,
+      const unsigned int max_size = 0L){
     if(data.debug > 1){
       double max_w =  -std::numeric_limits<double>::max();
       double min_w = std::numeric_limits<double>::max();
@@ -23,6 +25,11 @@ protected:
         ESS += w * w;
       }
       ESS = 1 / ESS;
+
+      if(have_resampled)
+        data.log(2) << "Sub-sampled cloud. There are " << cl.size()
+                    << " unique particles where up to " << max_size
+                    << " is possible. ";
 
       data.log(2) << "(min, max) log weights are: ("
                   << min_w  << ", " << max_w  <<  "). "
@@ -96,6 +103,7 @@ public:
           double max_weight =  -std::numeric_limits<double>::max();
           arma::uvec r_set = get_risk_set(data, t);
           unsigned int n_elem = new_cloud.size();
+          double log_N = std::log(n_elem);
 
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static) reduction(max:max_weight)
@@ -112,7 +120,7 @@ public:
               dens_calc.log_prob_state_given_previous(
                 it->parent->get_state(), it->get_state()        , t + 1);
 
-            it->log_unnormalized_weight = it->log_weight =
+            it->log_likelihood_term = it->log_weight =
               /* nominator */
               log_prob_y_given_state + log_prob_state_given_other
               /* denoninator */
@@ -121,9 +129,19 @@ public:
             if(did_resample){
               it->log_weight +=
                 it->parent->log_weight - it->parent->log_resampling_weight;
+              /* See
+               *   Doucet, A., & Johansen, A. M. (2009). A tutorial on particle
+               *   filtering and smoothing: Fifteen years later. Handbook of
+               * nonlinear filtering, 12(656-704), 3.
+               * Page 11, 15, 21, and 26.
+               */
+              it->log_likelihood_term +=
+                it->parent->log_weight - it->parent->log_resampling_weight -
+                log_N;
 
             } else {
               it->log_weight += it->parent->log_weight;
+              it->log_likelihood_term += it->parent->log_weight;
 
             }
 
@@ -251,6 +269,7 @@ public:
       if(data.debug > 0)
         data.log(1) << "Weighting particles";
       {
+        const bool do_debug = data.debug > 4;
         double max_weight = -std::numeric_limits<double>::max();
         arma::uvec r_set = get_risk_set(data, t);
         unsigned int n_elem = new_cloud.size();
@@ -274,7 +293,26 @@ public:
             dens_calc.log_artificial_prior(
               *it->child /* note child */, t + 1 /* note t + 1 */);
 
-          it->log_unnormalized_weight = it->log_weight =
+          if(do_debug){
+            const int wd = 11;
+            std::stringstream ss;
+
+            ss << std::setprecision(6)
+               << "log-like terms"
+               << " 'log_prob_y_given_state' "            << std::setw(wd) << log_prob_y_given_state
+               << " 'log_prob_state_given_previous' "     << std::setw(wd) << log_prob_state_given_previous
+               << " 'log_prob_next_given_state' "         << std::setw(wd) << log_prob_next_given_state
+               << " 'parent->log_weight' "                << std::setw(wd) << it->parent->log_weight
+               << " 'child->log_weight' "                 << std::setw(wd) << it->child->log_weight
+               << " 'log_importance_dens' "               << std::setw(wd) << log_importance_dens
+               << " 'parent->log_resampling_weight' "     << std::setw(wd) << it->parent->log_resampling_weight
+               << " 'child->log_resampling_weight' "      << std::setw(wd) << it->child->log_resampling_weight
+               << " 'log_artificial_prior' "              << std::setw(wd) << log_artificial_prior;
+
+            data.log(5) << ss.str();
+          };
+
+          it->log_likelihood_term = it->log_weight =
             /* nominator */
             (log_prob_y_given_state + log_prob_state_given_previous + log_prob_next_given_state +
               it->parent->log_weight + it->child->log_weight)
@@ -289,6 +327,11 @@ public:
       }
 
       debug_msg_after_weighting(data, new_cloud);
+
+      if(data.N_smooth_final < data.N_smooth){
+        new_cloud = re_sample_cloud(data.N_smooth_final, new_cloud);
+        debug_msg_after_weighting(data, new_cloud, true, data.N_smooth_final);
+      }
 
       /* Add cloud  */
       smoothed_clouds.push_back(std::move(new_cloud));
@@ -411,15 +454,7 @@ public:
         }
 
         // add pairs
-//#ifdef _OPENMP
-// Locks should not be needed. See https://stackoverflow.com/a/13955871
-// #pragma omp critical(smoother_lock_brier_one)
-// {
-//#endif
         new_trans_like[i] = std::move(pf_pairs);
-//#ifdef _OPENMP
-// }
-//#endif
 
         double log_artificial_prior = // TODO: have already been computed
           dens_calc.log_artificial_prior(bw_particle, t);
@@ -429,7 +464,7 @@ public:
 
         // add particle to smooth cloud with weight
         particle &new_p = new_cloud.set_particle(i, bw_particle.get_state());
-        new_p.log_unnormalized_weight = new_p.log_weight = this_log_weight;
+        new_p.log_likelihood_term = new_p.log_weight = this_log_weight;
 
         max_weight = MAX(max_weight, this_log_weight);
       } // end loop over bw particle

@@ -17,12 +17,28 @@ systematic_resampling_test <- function(size, probs) {
     .Call(`_dynamichazard_systematic_resampling_test`, size, probs)
 }
 
+sample_n_count_replicas_indices_test <- function(size, probs) {
+    .Call(`_dynamichazard_sample_n_count_replicas_indices_test`, size, probs)
+}
+
+sample_n_count_replicas_systematic_test <- function(size, probs) {
+    .Call(`_dynamichazard_sample_n_count_replicas_systematic_test`, size, probs)
+}
+
 mvrnorm_test <- function(mu, sigma_chol) {
     .Call(`_dynamichazard_mvrnorm_test`, mu, sigma_chol)
 }
 
 dmvnrm_log_test <- function(x, mean, sigma_chol_inv) {
     .Call(`_dynamichazard_dmvnrm_log_test`, x, mean, sigma_chol_inv)
+}
+
+mvtrnorm_test <- function(mu, sigma_chol, nu) {
+    .Call(`_dynamichazard_mvtrnorm_test`, mu, sigma_chol, nu)
+}
+
+dmvtrm_log_test <- function(x, mean, sigma_chol_inv, nu) {
+    .Call(`_dynamichazard_dmvtrm_log_test`, x, mean, sigma_chol_inv, nu)
 }
 
 bigglm_updateQR_rcpp <- function(D, rbar, thetab, ss, checked, tol, model, X, eta, offset, at_risk_length, y, w) {
@@ -121,12 +137,12 @@ parallelglm <- function(X, Ys, family, beta0, weights, offsets, tol = 1e-8, nthr
     .Call(`_dynamichazard_parallelglm`, X, Ys, family, beta0, weights, offsets, tol, nthreads, it_max, trace, method)
 }
 
-PF_smooth <- function(n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, Q_0, Q, Q_tilde, risk_obj, F, n_max, n_threads, fixed_parems, N_fw_n_bw, N_smooth, forward_backward_ESS_threshold, debug, N_first, type, method, smoother, model) {
-    .Call(`_dynamichazard_PF_smooth`, n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, Q_0, Q, Q_tilde, risk_obj, F, n_max, n_threads, fixed_parems, N_fw_n_bw, N_smooth, forward_backward_ESS_threshold, debug, N_first, type, method, smoother, model)
+PF_smooth <- function(n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, Q_0, Q, Q_tilde, risk_obj, F, n_max, n_threads, fixed_parems, N_fw_n_bw, N_smooth, N_smooth_final, forward_backward_ESS_threshold, debug, N_first, type, nu, method, smoother, model) {
+    .Call(`_dynamichazard_PF_smooth`, n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, Q_0, Q, Q_tilde, risk_obj, F, n_max, n_threads, fixed_parems, N_fw_n_bw, N_smooth, N_smooth_final, forward_backward_ESS_threshold, debug, N_first, type, nu, method, smoother, model)
 }
 
-particle_filter <- function(n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, Q_0, Q, Q_tilde, risk_obj, F, n_threads, fixed_parems, N_fw_n_bw, forward_backward_ESS_threshold, debug, N_first, type, is_forward, method, model) {
-    .Call(`_dynamichazard_particle_filter`, n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, Q_0, Q, Q_tilde, risk_obj, F, n_threads, fixed_parems, N_fw_n_bw, forward_backward_ESS_threshold, debug, N_first, type, is_forward, method, model)
+particle_filter <- function(n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, Q_0, Q, Q_tilde, risk_obj, F, n_threads, fixed_parems, N_fw_n_bw, forward_backward_ESS_threshold, debug, N_first, nu, type, is_forward, method, model) {
+    .Call(`_dynamichazard_particle_filter`, n_fixed_terms_in_state_vec, X, fixed_terms, tstart, tstop, a_0, R, Q_0, Q, Q_tilde, risk_obj, F, n_threads, fixed_parems, N_fw_n_bw, forward_backward_ESS_threshold, debug, N_first, nu, type, is_forward, method, model)
 }
 
 compute_PF_summary_stats <- function(rcpp_list, n_threads, a_0, Q, Q_0, R, debug, F, do_use_F = FALSE, do_compute_E_x = TRUE) {
@@ -145,7 +161,7 @@ test_copy_vec <- function(x, n_times) {
     .Call(`_dynamichazard_test_copy_vec`, x, n_times)
 }
 
-pf_fixed_effect_get_QR <- function(clouds, risk_obj, ran_vars, fixed_terms, R_top, tstart, tstop, fixed_parems, family, max_threads, debug, max_bytes = 1000000L) {
+pf_fixed_effect_get_QR <- function(clouds, risk_obj, ran_vars, fixed_terms, R_top, tstart, tstop, fixed_parems, family, max_threads, debug, max_bytes = 5000000L) {
     .Call(`_dynamichazard_pf_fixed_effect_get_QR`, clouds, risk_obj, ran_vars, fixed_terms, R_top, tstart, tstop, fixed_parems, family, max_threads, debug, max_bytes)
 }
 

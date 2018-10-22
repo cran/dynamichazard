@@ -208,36 +208,36 @@ Rcpp::List pf_fixed_effect_iteration(
                 << std::setw(12) << n_particles << " particles in "
                 << "`pf_fixed_effect_iteration`" << std::endl;
 
-    std::unique_ptr<data_holder> dat;
-    if(family == BINOMIAL){
-      dat.reset(new data_holder(
-          X, Y, dts, cloud, cl_weights, ran_vars, fixed_parems,
-          std::unique_ptr<glm_base>(new logistic()), block_use));
+  std::unique_ptr<data_holder> dat;
+  if(family == BINOMIAL){
+    dat.reset(new data_holder(
+        X, Y, dts, cloud, cl_weights, ran_vars, fixed_parems,
+        std::unique_ptr<glm_base>(new logistic()), block_use));
 
-    } else if(family == POISSON){
-      dat.reset(new data_holder(
-          X, Y, dts, cloud, cl_weights, ran_vars, fixed_parems,
-          std::unique_ptr<glm_base>(new exponential()), block_use));
+  } else if(family == POISSON){
+    dat.reset(new data_holder(
+        X, Y, dts, cloud, cl_weights, ran_vars, fixed_parems,
+        std::unique_ptr<glm_base>(new exponential()), block_use));
 
-    } else
-      Rcpp::stop("Family not implemented");
+  } else
+    Rcpp::stop("Family not implemented");
 
-    /* setup generators */
-    for(arma::uword i_start = 0L; i_start < n_particles; i_start += block_use)
-      pool.submit(
-        std::unique_ptr<qr_data_generator>(
-          new pf_fixed_generator(
-              *dat.get(), i_start, std::min(
-                  n_particles - 1L, i_start + block_use - 1L))));
+  /* setup generators */
+  for(arma::uword i_start = 0L; i_start < n_particles; i_start += block_use)
+    pool.submit(
+      std::unique_ptr<qr_data_generator>(
+        new pf_fixed_generator(
+            *dat.get(), i_start, std::min(
+                n_particles - 1L, i_start + block_use - 1L))));
 
-    // compute and return
-    R_F res = pool.compute();
+  // compute and return
+  R_F res = pool.compute();
 
-    return Rcpp::List::create(
-      Rcpp::Named("R") =  Rcpp::wrap(res.R),
-      Rcpp::Named("pivot") =  Rcpp::wrap(res.pivot),
-      Rcpp::Named("f") =  Rcpp::wrap(res.F),
-      Rcpp::Named("dev") =  Rcpp::wrap(res.dev));
+  return Rcpp::List::create(
+    Rcpp::Named("R") =  Rcpp::wrap(res.R),
+    Rcpp::Named("pivot") =  Rcpp::wrap(res.pivot),
+    Rcpp::Named("f") =  Rcpp::wrap(res.F),
+    Rcpp::Named("dev") =  Rcpp::wrap(res.dev));
 }
 
 // [[Rcpp::export]]
@@ -247,7 +247,7 @@ Rcpp::List pf_fixed_effect_get_QR(
     const arma::vec &tstart, const arma::vec &tstop,
     const arma::vec &fixed_parems, const std::string family,
     const int max_threads, const bool debug,
-    const unsigned int max_bytes = 1000000){
+    const unsigned int max_bytes = 5000000){
   const unsigned int n_clouds = clouds.size();
   Rcpp::List out(n_clouds),
              risk_sets = Rcpp::as<Rcpp::List>(risk_obj["risk_sets"]);
@@ -259,6 +259,9 @@ Rcpp::List pf_fixed_effect_get_QR(
                    max_threads);
 
   for(unsigned int i = 0; i < n_clouds; ++i){
+    if((i + 1L) % 5L == 0L)
+      Rcpp::checkUserInterrupt();
+
     Rcpp::List cl = Rcpp::as<Rcpp::List>(clouds[i]);
     arma::uvec risk_set = Rcpp::as<arma::uvec>(risk_sets[i]);
     risk_set.for_each([](arma::uvec::elem_type& val) { val -= 1L; } );
