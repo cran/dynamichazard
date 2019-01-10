@@ -134,9 +134,21 @@ test_sim_func_logit <- function(
   re_draw = T, beta_start = 3, intercept_start,
   sds = rep(1, n_vars + !missing(intercept_start)),
   is_fixed = c(), lambda = 1,
-  tstart_sampl_func = function(t_0 = t_0, t_max = t_max)
-    t_0,
-  betas){
+  tstart_sampl_func = function(t_0 = t_0, t_max = t_max) t_0, betas){
+  cl <- match.call()
+  cl[["linkfunc"]] <- "logit"
+  cl[[1L]] <- bquote(
+    environment(.(cl[[1L]]))$test_sim_func_discrete)
+  eval(cl, parent.frame())
+}
+
+test_sim_func_discrete <- function(
+  n_series, n_vars = 10L, t_0 = 0L, t_max = 10L, x_range = .1, x_mean = -.1,
+  re_draw = T, beta_start = 3, intercept_start,
+  sds = rep(1, n_vars + !missing(intercept_start)),
+  is_fixed = c(), lambda = 1,
+  tstart_sampl_func = function(t_0 = t_0, t_max = t_max) t_0, betas,
+  linkfunc){
   # make output matrix
   n_row_max <- n_row_inc <- 10^5
   res <- matrix(NA_real_, nrow = n_row_inc, ncol = 4 + n_vars,
@@ -174,6 +186,12 @@ test_sim_func_logit <- function(
     ceiling(x * 100) / 100
   x_adj <- - x_range / 2 + x_mean
 
+  linkfunc <- switch(
+    linkfunc,
+    logit = function(x) 1 / (1 + exp(-x)),
+    cloglog = function(x) -expm1(-exp(x)),
+    stop(sQuote("linkfunc"), " not implemented"))
+
   # simulate
   for(id in 1:n_series){
     tstart <- tstop <- ceiler(tstart_sampl_func(t_0, t_max))
@@ -188,8 +206,8 @@ test_sim_func_logit <- function(
 
       tmp_t <- tstart
       while(tmp_t <= interval_start &&  interval_start < tstop) {
-        exp_eta <- exp((betas[interval_start + 2, ] %*% l_x_vars)[1, 1])
-        event <- exp_eta / (1 + exp_eta) > get_unif_draw(1)
+        event <- linkfunc((betas[interval_start + 2, ] %*% l_x_vars)[1, 1]) >
+          get_unif_draw(1)
 
         interval_start <- interval_start + 1L
         if(event || interval_start >= t_max){

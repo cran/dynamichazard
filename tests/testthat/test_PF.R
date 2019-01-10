@@ -424,8 +424,10 @@ test_that("PF_EM gives previous results on head neck data set with fixed effects
       max_T = 30))
 
   # tmp <- readRDS("previous_results/local_tests/pf_logit_w_fixed.RDS")
-  expect_known_value(pp_fit[!names(pp_fit) %in% c("clouds", "call")],
+  expect_known_value(pp_fit[!names(pp_fit) %in% c("clouds", "call", "control")],
                      "local_tests/pf_logit_w_fixed.RDS")
+  expect_equal(
+    pp_fit$control$n_threads, max(parallel::detectCores(logical = FALSE), 1))
 })
 
 test_that("compute_PF_summary_stats gives previous results", {
@@ -895,7 +897,7 @@ test_that("Using `n_smooth_final` works as expected and yields previous results"
     control = PF_control(
       N_fw_n_bw = 500, N_first = 2500, N_smooth = 5000, N_smooth_final = 1000,
       n_max = 1, eps = .001, Q_tilde = diag(.2^2, 2), est_a_0 = FALSE,
-      n_threads = max(parallel::detectCores(logical = FALSE), 1))))
+      n_threads = 1)))
 
   expect_known_value(f_fit_1[!names(f_fit_1) %in% c("clouds", "call")],
                      file = "n_smooth_final_RW.RDS")
@@ -924,7 +926,7 @@ test_that("Using `n_smooth_final` works as expected and yields previous results"
     control = PF_control(
       N_fw_n_bw = 500, N_first = 2500, N_smooth = 1000, N_smooth_final = 500,
       n_max = 1, eps = .001, Q_tilde = diag(.1^2, 2),
-      n_threads = max(parallel::detectCores(logical = FALSE), 1))))
+      n_threads = 1)))
 
   # # compare with the following after you change `n_max`
   # set.seed(seed)

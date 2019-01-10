@@ -3,7 +3,6 @@ if(!require(shiny))
   stop("Requires 'shiny' to run the demo")
 
 test_sim_func_exp <- dynamichazard:::test_sim_func_exp
-test_sim_func_logit <- dynamichazard:::test_sim_func_logit
 exp_model_names <- dynamichazard:::exp_model_names
 
 # Global params
@@ -150,7 +149,7 @@ ui <- fluidPage(
 
        selectInput("sim_with",
                    "Choose model to simulate from",
-                   choices = c("logit", "exponential"),
+                   choices = c("logit", "cloglog", "exponential"),
                    selected = start_args$sim_with),
 
        radioButtons("sim_fix_options",
@@ -188,7 +187,7 @@ ui <- fluidPage(
 
        selectInput("est_with_model",
                    "Choose model to estimate with",
-                   choices = c("logit", "exponential"),
+                   choices = c("logit", "cloglog", "exponential"),
                    selected = start_args$est_with_model),
 
        selectInput("est_with_method",
@@ -359,7 +358,7 @@ server <- function(input, output) {
 
   sim_input <- reactive({
     f_choice <- if(input$sim_with == "exponential")
-      quote(test_sim_func_exp) else quote(test_sim_func_logit)
+      quote(test_sim_func_exp) else quote(test_sim_func_discrete)
 
     n_fixed <- if(input$sim_fix_options == 1)
       0 else if(input$sim_fix_options == 2)
@@ -371,9 +370,8 @@ server <- function(input, output) {
     x_range <- diff(input$covar_range)
     x_mean <- mean(input$covar_range)
 
-    sim_exp <- bquote({
-      set.seed(.(input$seed))
-      dat <- .(f_choice)(
+    sim_quote <- bquote(
+      .(f_choice)(
         n_series = .(n_series_input()),
         n_vars = 5,
         t_max = .(t_max), re_draw = T, beta_start = runif(5, min = -1.5, max = 1.5),
@@ -382,7 +380,15 @@ server <- function(input, output) {
         x_range = .(x_range), x_mean = .(x_mean), lambda = .(5 / t_max),
         is_fixed = .(if(n_fixed == 0) c() else 1:n_fixed),
 
-        tstart_sampl_func = .(start_fun))
+        tstart_sampl_func = .(start_fun)))
+    if(input$sim_with == "cloglog")
+      sim_quote[["linkfunc"]] <- "cloglog"
+    else if(input$sim_with == "logit")
+      sim_quote[["linkfunc"]] <- "logit"
+
+    sim_exp <- bquote({
+      set.seed(.(input$seed))
+      dat <- .(sim_quote)
 
       dat$res[dat$res$event == 0 & dat$res$tstop > t_max, "tstop"] <- t_max
     })
