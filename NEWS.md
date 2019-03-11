@@ -1,3 +1,16 @@
+# dynamichazard 0.6.4
+* Particle filtering implementation is changed. One may get slightly different 
+  results.
+* Estimation with a moderate amount of fixed parameters is much faster now with 
+  the particle filters.
+* Averaging is possible with `PF_EM`.
+* `PF_get_score_n_hess` is added to compute the approximate negative 
+  observation matrix and score vector.
+* `nu` in `PF_control` scales the scale matrix to get an identical covariance 
+  matrix.
+* Fixed bug in `get_Q_0`.
+* Fixed bug in M-step in EM algorithm with particle smoothers.
+
 # dynamichazard 0.6.2
 * The cloglog link function is added.
 * `predict.ddhazard` has been re-written. The output with `type = "term"` 

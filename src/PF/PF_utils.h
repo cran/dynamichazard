@@ -1,11 +1,11 @@
 #ifndef PF_UTILS
 #define PF_UTILS
 
-#include <tuple>
 #include "particles.h"
 #include "densities.h"
-#include "../arma_BLAS_LAPACK.h"
 #include "../utils.h"
+#include "cond_approx.h"
+#include <set>
 
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
@@ -80,7 +80,7 @@ inline normalize_weights_output normalize_log_weights(
   (container, max_weight);
 }
 
-struct normalize_log_resampling_weight_F{
+struct normalize_log_resampling_weight_F {
   static inline double& get(particle &p){
     return p.log_resampling_weight;
   }
@@ -94,96 +94,42 @@ inline normalize_weights_output normalize_log_resampling_weight(
     (cl, max_weight);
 }
 
+struct normalize_log_std_vec_double {
+  static inline double& get(double &d){
+    return d;
+  }
+};
+template<bool compute_ESS, bool update>
+inline normalize_weights_output normalize_log_weights(
+    std::vector<double> &ws, const double max_weight){
+  return
+  normalize_weights
+  <normalize_log_std_vec_double, compute_ESS, update>
+  (ws, max_weight);
+}
+
 /* ------------------------------------------- */
 
 struct nothing {};
 
 /* ------------------------------------------- */
 
-/* The function below takes in a state \bar{\alpha} and returns
- * mu = R^\top L^\top X^\top ((-G(\bar{\alpha})) X L \bar{\alpha}
- *       + g(\bar{\alpha}))
- * Sigma = (R^\top L^\top X^\top (-G(\bar{\alpha})) X L R + Q^-1)^-1 */
-
-struct input_for_normal_apprx {
-  /* mean of error term              */
-  arma::vec mu;
-  /* covariance matrix of error term */
-  arma::mat Sigma;
-  arma::mat Sigma_inv;
-  arma::mat Sigma_inv_chol;
-  arma::mat Sigma_chol;
-  arma::mat sigma_chol_inv;
+struct get_approx_use_mean_output {
+  std::vector<std::unique_ptr<dist_comb>> dists;
+  nlopt_return_value_msg msg;
 };
 
-input_for_normal_apprx taylor_normal_approx(
-    pf_base_dens&, const PF_data&,
-    const unsigned int, const arma::mat&, const arma::vec&,
-    const arma::vec&, arma::uvec& /* non-const avoid copy /w arma */,
-    const unsigned int, const bool, const bool,
-    const unsigned int max_steps = 25);
+template<bool is_forward>
+get_approx_use_mean_output get_approx_use_mean(
+    std::shared_ptr<PF_cdist>, cloud&, const PF_data&, pf_dens&, arma::uword);
 
-input_for_normal_apprx taylor_normal_approx(
-    pf_base_dens&, const PF_data&, const unsigned int,
-    const arma::mat&, const arma::vec&, const arma::vec&,
-    const unsigned int, const bool, const bool,
-    const unsigned int max_steps = 25);
-
-/* ------------------------------------------- */
-
-struct input_for_normal_apprx_w_cloud_mean : public input_for_normal_apprx {
-  /* the conditional means for each of the particles given their parents */
-  std::vector<arma::vec> mu_js;
-  std::vector<arma::vec> xi_js;
-
-  input_for_normal_apprx_w_cloud_mean(input_for_normal_apprx &&other):
-    input_for_normal_apprx(other) {}
+struct get_approx_use_particle_output {
+  std::vector<std::unique_ptr<dist_comb>> dists;
+  nlopt_return_value_msgs msgs;
 };
-
-input_for_normal_apprx_w_cloud_mean
-  taylor_normal_approx_w_cloud_mean(
-    pf_base_dens&, const PF_data&,
-    const unsigned int, const covarmat&, const arma::vec&, cloud&, const bool);
-
-/* ------------------------------------------- */
-
-struct input_for_normal_apprx_w_particle_mean_element {
-  arma::vec mu; /*        \hat x_t */
-  arma::vec xi; /* R^\top \hat x_t */
-  arma::mat sigma_chol_inv;
-  arma::mat sigma;
-};
-
-using input_for_normal_apprx_w_particle_mean =
-  std::vector<input_for_normal_apprx_w_particle_mean_element>;
-
-input_for_normal_apprx_w_particle_mean
-  taylor_normal_approx_w_particles(
-    pf_base_dens&, const PF_data&, const unsigned int, const covarmat&, cloud&,
-    const bool);
-
-input_for_normal_apprx_w_particle_mean
-  taylor_normal_approx_w_particles(
-    pf_base_dens&, const PF_data&, const unsigned int, const covarmat&,
-    std::vector<arma::vec>&, const bool);
-
-/* ------------------------------------------- */
-
-class bw_fw_particle_combiner {
-  const PF_data &data;
-
-public:
-  const covarmat &Q_trans;
-  const covarmat  Q;
-
-  bw_fw_particle_combiner(const PF_data&);
-
-  arma::vec operator()(const particle&, const particle&,
-                       const bool do_transform = true) const;
-
-  arma::vec operator()(const arma::vec&, const arma::vec&,
-                       const bool do_transform = true) const;
-};
+template<bool is_forward>
+get_approx_use_particle_output get_approx_use_particle(
+    std::shared_ptr<PF_cdist>, cloud&, const PF_data&, pf_dens&, arma::uword);
 
 /* ------------------------------------------- */
 
@@ -233,9 +179,97 @@ Rcpp::List get_rcpp_list_from_cloud(
 
 smoother_output get_clouds_from_rcpp_list(const Rcpp::List &rcpp_list);
 
+template<bool is_smooth, const bool reverse>
+std::vector<cloud> get_cloud_from_rcpp_list
+  (const Rcpp::List &, const std::vector<cloud> *fw = nullptr,
+   const std::vector<cloud> *bw = nullptr);
+
 /* ------------------------------------------- */
 
 cloud re_sample_cloud(const unsigned int, const cloud);
+
+/* ------------------------------------------- */
+
+template
+  <class TContainer,
+   double (*FWeight)(const typename TContainer::value_type&),
+   double (*FReWeight)(const typename TContainer::value_type&)>
+  std::map<arma::uword, double>
+  get_resample_idx_n_log_weight
+    (const TContainer &container,
+     const arma::uvec &resample_idx)
+  {
+    std::map<arma::uword, double> out;
+    std::map<arma::uword, unsigned int> count;
+    for(auto x : resample_idx){
+      std::map<arma::uword, double>::iterator it = out.find(x);
+      if(it == out.end()){
+        out[x] = FWeight(container[x]) - FReWeight(container[x]);
+        count[x] = 1L;
+        continue;
+
+      }
+
+      count[x] += 1L;
+
+    }
+
+    double max_weight = std::numeric_limits<double>::epsilon();
+    for(auto x : count){
+      out[x.first] += std::log(x.second);
+      max_weight = MAX(max_weight, out[x.first]);
+    }
+
+    /* renormalize */
+    double norm_constant = 0;
+    for(auto &x : out){
+      x.second = MAX(
+        exp(x.second - max_weight), std::numeric_limits<double>::epsilon());
+
+      norm_constant += x.second;
+    }
+
+    const double log_norm_constant = log(norm_constant);
+    for(auto &x : out)
+      x.second = log(x.second) - log_norm_constant;
+
+    return out;
+  }
+
+double get_weight_from_particle(const particle&);
+double get_resample_weight_from_particle(const particle&);
+
+/* ------------------------------------------- */
+
+std::vector<std::set<arma::uword> > get_ancestors
+  (const std::vector<cloud>&);
+
+class score_n_hess_base {
+public:
+  virtual const arma::mat &get_a_state() const = 0;
+  virtual const arma::mat &get_a_obs() const = 0;
+  virtual const arma::mat &get_B_state() const = 0;
+  virtual const arma::mat &get_B_obs() const = 0;
+  virtual const double get_weight() const = 0;
+
+  virtual ~score_n_hess_base() = default;
+};
+
+std::vector<std::unique_ptr<score_n_hess_base> > PF_get_score_n_hess
+  (const std::vector<cloud>&, const arma::mat&,const arma::mat&,
+   const std::vector<arma::uvec>&, const arma::ivec&, const arma::vec&,
+   const arma::mat&, const arma::mat&, const arma::vec&, const arma::vec&,
+   const arma::vec&, const std::string, const int, const bool, const bool);
+
+std::vector<std::unique_ptr<score_n_hess_base> > PF_get_score_n_hess_O_N_sq
+  (arma::mat&, const arma::mat&, const std::vector<arma::uvec>&,
+   const Rcpp::List&, const arma::ivec&, const arma::vec&,
+   arma::mat&, arma::mat&, const arma::vec&,
+   const arma::vec&, const arma::vec&, const std::string, const int,
+   const bool, const bool, const arma::vec&, const arma::mat&, arma::mat&,
+   const arma::mat&, const arma::uword, const arma::uword, const double,
+   const double, const double, Rcpp::Nullable<Rcpp::NumericVector>,
+   const std::string);
 
 #undef USE_PRIOR_IN_BW_FILTER_DEFAULT
 #undef MAX

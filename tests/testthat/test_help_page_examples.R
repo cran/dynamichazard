@@ -117,14 +117,13 @@ test_that("static_glm help page examples gives the same results", {
 })
 
 # Function to compute cloud means
-get_means <- function(result){
-  means <- lapply(
+get_means <- function(result)
+  lapply(
     result[c("forward_clouds", "backward_clouds", "smoothed_clouds")],
     function(clouds)
       do.call(rbind, sapply(clouds, function(row){
         colSums(t(row$states) * drop(row$weights))
       }, simplify = FALSE)))
-}
 
 test_that("PF_EM help page example runs and gives previous computed results", {
   skip_on_cran()
@@ -152,8 +151,8 @@ test_that("PF_EM help page example runs and gives previous computed results", {
   if(dir.exists("previous_results/local_tests"))
     # tmp <- readRDS("previous_results/local_tests/survival_lung_example.RDS")
     expect_known_value(
-      pf_fit[!names(pf_fit) %in% c("call", "control")], "local_tests/survival_lung_example.RDS",
-      tolerance = 1.49e-08)
+      pf_fit[!names(pf_fit) %in% c("call", "control")],
+      "local_tests/survival_lung_example.RDS", tolerance = 1.49e-08)
   expect_equal(
     pf_fit$control$n_threads, max(parallel::detectCores(logical = FALSE), 1))
 
@@ -318,14 +317,15 @@ test_that("example in 'PF_EM' with gives previous results w/ a few iterations", 
     fixed = Surv(tstart, tstop, y) ~ x, random = ~ grp + x - 1,
     data = df, model = "logit", by = 1L, max_T = max(df$tstop),
     Q_0 = diag(1.5^2, p), id = df$id, type = "VAR",
-    G = G, theta = c(.5, .5), J = J, psi = log(c(.1, .1)),
-    K = K, phi = log(-(c(.4, 0) + 1) / (c(.4, 0) - 1)),
+    G = G, theta = c(0.905, .292), J = J, psi = log(c(0.261, 0.116)),
+    K = K, phi = log(-(c(0.63, -0.015) + 1) / (c(0.63, -0.015) - 1)),
+    fixed_effects = c(-5.8, 0.049),
     control = PF_control(
       N_fw_n_bw = 100L, N_smooth = 100L, N_first = 500L,
       method = "AUX_normal_approx_w_cloud_mean",
       nu = 5L, # sample from multivariate t-distribution
-      n_max = 2L,  # should maybe be larger
-      smoother = "Fearnhead_O_N", eps = 1e-4,
+      n_max = 5L,  averaging_start = 1L,
+      smoother = "Fearnhead_O_N", eps = 1e-4, covar_fac = 1.2,
       n_threads = 4L # depends on your cpu(s)
     )))
 
@@ -335,8 +335,8 @@ test_that("example in 'PF_EM' with gives previous results w/ a few iterations", 
   # take more iterations with more particles
   cl <- fit$call
   ctrl <- cl[["control"]]
-  ctrl[c("N_fw_n_bw", "N_smooth", "N_smooth_final", "N_first", "n_max")] <- list(
-    200L, 1000L, 200L, 5000L, 1L)
+  ctrl[c("N_fw_n_bw", "N_smooth", "N_first", "n_max",
+         "averaging_start")] <- list(200L, 1000L, 5000L, 2L, 1L)
   cl[["control"]] <- ctrl
   cl[c("phi", "psi", "theta")] <- list(fit$phi, fit$psi, fit$theta)
   fit_extra <- suppressWarnings(eval(cl))
@@ -389,16 +389,16 @@ test_that("`PF_forward_filter` the results stated in the comments and does not a
   # dput(logLik(pf_fit))
   expect_equal(
     end_log_like <- logLik(pf_fit), structure(
-      -257.681175074233, "P(y_t|y_{1:(t-1)})" = c(
-        -6.71060861933579,
-        -17.5627634269578, -22.8058382197423, -23.1708581096524, -39.9362204794205,
-        -31.4941425273845, -12.9138207419967, -10.7865227878754, -10.9774543784185,
-        -10.6771704879913, -5.80142302360756, -5.57902010066932, -2.26856972504811,
-        -9.68427843436796, -7.54895491133089, -4.88347888546344, -1.69752908305435,
-        -7.49674818681715, -1.24357829312245, -6.554857506634, -4.37465208440007,
-        -0.942555157678413, -0.871838874574558, -4.25672893979116, -0.77141420956524,
-        -0.616157218686647, -4.23097329518881, -0.566549512748297, -0.658228352485867,
-        -0.598239500223801),
+      -258.731786156198, "P(y_t|y_{1:(t-1)})" = c(
+        -6.70941384660467,
+        -17.4991371234673, -22.7486543765548, -23.1567710570606, -40.7268735916535,
+        -32.547747619028, -12.6814755271764, -10.6604404283416, -10.9186968404081,
+        -10.6576119071216, -5.64937811314284, -5.45910379291176, -2.10659339971792,
+        -9.7217688765877, -7.55621994298938, -4.86522902610044, -1.65390885383481,
+        -7.50079904558733, -1.24740698294264, -6.5341593177666, -4.36317037539044,
+        -0.95903332721229, -0.902069557998193, -4.24515671289682, -0.840276896118074,
+        -0.678457059772247, -4.20700482272061, -0.614170469993203, -0.69285146373326,
+        -0.628205801364764),
       df = 2, nobs = NA_integer_, class = "logLik"))
 
   # gives the same
@@ -498,4 +498,72 @@ test_that("ddsurvcurve manual page examples give the same", {
                          tstop = "tstop")
   z <- lines(ddcurve, col = "DarkOrange")
   expect_known_value(z, file = "ddsurvcurve-fix-disc-2.RDS")
+})
+
+test_that("`get_Q_0` example returns the correct covariance matrix", {
+  Fmat <- matrix(c(.8, .4, .1, .5), 2, 2)
+  Qmat <- matrix(c( 1, .5, .5,  2), 2)
+
+  x1 <- get_Q_0(Qmat = Qmat, Fmat = Fmat)
+  x2 <- Qmat
+  for(i in 1:101)
+    x2 <- tcrossprod(Fmat %*% x2, Fmat) + Qmat
+  expect_equal(x1, x2)
+})
+
+test_that("'PF_get_score_n_hess' gives previous results", {
+  skip_on_cran()
+
+  library(dynamichazard)
+  .lung <- lung[!is.na(lung$ph.ecog), ]
+  # standardize
+  .lung$age <- scale(.lung$age)
+
+  set.seed(43588155)
+  pf_fit <- suppressWarnings(PF_EM(
+    fixed = Surv(time, status == 2) ~ ph.ecog + age,
+    random = ~ age, model = "exponential",
+    data = .lung, by = 50, id = 1:nrow(.lung), type = "VAR", Q_0 = diag(1, 2),
+    fixed_effects = c(-6.3, 0.42, 0.22),
+    Q = structure(c(0.068, -0.044, -0.044, 0.039), .Dim = c(2L, 2L)),
+    Fmat = structure(c(0.67, 0.23, -0.24, 0.63), .Dim = c(2L, 2L)),
+    max_T = 800,
+    control = PF_control(
+      N_fw_n_bw = 250, N_first = 1000, N_smooth = 500, covar_fac = 1.1,
+      nu = 6, n_max = 5L, eps = 1e-5, est_a_0 = FALSE, averaging_start = 100L,
+      n_threads = 2L)))
+
+  expect_output(comp_obj <- PF_get_score_n_hess(pf_fit),
+                "Using '.lung' as the 'data' argument",
+                fixed = TRUE)
+  comp_obj$set_n_particles(N_fw = 10000L, N_first = 10000L)
+  comp_obj$run_particle_filter()
+  o <- comp_obj$get_get_score_n_hess()
+
+  expect_known_value(o, "PF_get_score_n_hess-help-res.RDS")
+
+  expect_output(comp_obj <- PF_get_score_n_hess(pf_fit, use_O_n_sq = TRUE),
+                "Using '.lung' as the 'data' argument",
+                fixed = TRUE)
+  comp_obj$set_n_particles(N_fw = 250L, N_first = 250L)
+  o <- comp_obj$get_get_score_n_hess()
+
+  expect_known_value(o, "PF_get_score_n_hess-help-res-O_N_sq.RDS")
+
+  expect_output(o <- replicate(2L, {
+      runif(1)
+      pf_fit$seed <- .Random.seed
+      comp_obj <- PF_get_score_n_hess(pf_fit)
+      comp_obj$set_n_particles(N_fw = 1000L, N_first = 1000L)
+      comp_obj$run_particle_filter()
+      comp_obj$get_get_score_n_hess()
+    }, simplify = FALSE), "Using '.lung' as the 'data' argument",
+    fixed = TRUE)
+
+  for(s in names(o[[1L]])){
+    x1 <- o[[1L]][[s]]
+    x2 <- o[[2L]][[s]]
+    for(z in names(x1))
+      expect_true(!isTRUE(all.equal(x1[[z]], x2[[z]])))
+  }
 })
