@@ -328,6 +328,26 @@ PF_EM <- function(
     max_T = if(missing(max_T)) NULL else max_T, id = id,
     trace = trace, model, order = order, fixed = fixed, random = random)
 
+  if(type == "RW" && !missing(fixed) && !missing(random))
+    local({
+      func <- function(x){
+        v <- attr(x, "term.labels")
+        if(attr(x, "intercept"))
+          v <- c("intercept", v)
+        v
+      }
+
+      rvars <- func(static_args$terms$random)
+      fvars <- func(static_args$terms$fixed)
+
+      un <- intersect(rvars, fvars)
+      if(length(un) > 0L)
+        warning(paste0(
+          "The following terms are in both ", sQuote("fixed"), " and ",
+          sQuote("random"), " with ", sQuote("type = \"RW\""), ":  ",
+          paste0(sQuote(un), collapse = ", ")))
+    })
+
   #####
   # find matrices for state equation
   start_coefs <- get_start_values(
@@ -383,7 +403,7 @@ PF_EM <- function(
     n_threads = control$n_threads, smoother = control$smoother,
     Q_tilde = control$Q_tilde, est_a_0 = control$est_a_0,
     covar_fac = control$covar_fac, ftol_rel = control$ftol_rel,
-    averaging_start = control$averaging_start)
+    averaging_start = control$averaging_start, fix_seed = control$fix_seed)
 
   out <- .set_PF_names(out, rng_names = row.names(static_args$X),
                        fixed_names = rownames(static_args$fixed_terms))
@@ -614,6 +634,8 @@ PF_forward_filter.PF_EM <- function(x, N_fw, N_first, seed, ...){
   }
   if(!missing(seed))
     cl[["seed"]] <- substitute(seed)
+  else if(!x$control$fix_seed)
+    cl[["seed"]] <- NULL
 
   cl[c("N_fw", "N_first")] <- list(N_fw, N_first)
   cl[[1L]] <- quote(PF_forward_filter)
@@ -700,14 +722,16 @@ PF_forward_filter.data.frame <- function(
 
   Q_tilde <- get_Q_tilde(control$Q_tilde, ncol(Q))
 
-  # set the seed
-  old_seed <- .GlobalEnv$.Random.seed
-  # to make sure the user has the same `rng.kind`
-  on.exit(.GlobalEnv$.Random.seed <- old_seed)
   if(!is.null(seed)){
+    # set the seed
+    old_seed <- .GlobalEnv$.Random.seed
+    # to make sure the user has the same `rng.kind`
+    on.exit(.GlobalEnv$.Random.seed <- old_seed)
+
     stopifnot(length(seed) > 1) # make sure user did not use seed as in
     # `set.seed`
-    .GlobalEnv$.Random.seed <- seed
+    if(control$fix_seed)
+      .GlobalEnv$.Random.seed <- seed
   }
 
   out <- particle_filter(
@@ -722,10 +746,16 @@ PF_forward_filter.data.frame <- function(
     method = control$method, n_threads = control$n_threads, Q_tilde = Q_tilde,
     covar_fac = control$covar_fac, ftol_rel = control$ftol_rel)
 
-  structure(list(
-    forward_clouds = out, backward_clouds = list(), smoothed_clouds = list(),
-    transition_likelihoods = list()), class = "PF_clouds")
+  .create_PF_clouds(out)
 }
+
+.create_PF_clouds <- function(
+  forward_clouds, backward_clouds = list(), smoothed_clouds = list(),
+  transition_likelihoods = list())
+  structure(list(
+    forward_clouds = forward_clouds, backward_clouds = backward_clouds,
+    smoothed_clouds = smoothed_clouds,
+    transition_likelihoods = transition_likelihoods), class = "PF_clouds")
 
 get_Q_tilde <- function(x, n_vars)
   if(is.null(x)) diag(0, n_vars) else x
@@ -738,7 +768,7 @@ get_Q_tilde <- function(x, n_vars)
   forward_backward_ESS_threshold = NULL, debug = 0, trace,
   method = "AUX_normal_approx_w_particles", seed = NULL, smoother, model,
   fixed_params, type, Q_tilde, est_a_0, G, J, K, theta, psi, phi, ftol_rel,
-  averaging_start){
+  averaging_start, fix_seed){
   cl <- match.call()
   n_vars <- nrow(X)
   fit_call <- cl
@@ -764,7 +794,7 @@ get_Q_tilde <- function(x, n_vars)
   }
 
   fit_call[c("eps", "seed", "F.", "trace", "est_a_0", "G", "J", "K",
-             "theta", "psi", "phi", "averaging_start")] <- NULL
+             "theta", "psi", "phi", "averaging_start", "fix_seed")] <- NULL
 
   # print Q and F structure
   if(trace > 0 && is_restricted){
@@ -863,7 +893,8 @@ get_Q_tilde <- function(x, n_vars)
 
     #####
     # find clouds
-    assign(".Random.seed", seed, envir = .GlobalEnv)
+    if(fix_seed)
+      assign(".Random.seed", seed, envir = .GlobalEnv)
     clouds <- eval(fit_call, envir = parent.frame())
 
     if(trace > 0){
@@ -1148,10 +1179,13 @@ get_Q_tilde <- function(x, n_vars)
 #' distribution is used if it is zero.
 #' @param covar_fac factor to scale the covariance matrix with. Ignored if
 #' the values is less than or equal to zero.
-#' @param ftol_rel tolerance passed to \code{\link{nloptr}} in mode
+#' @param ftol_rel relative convergence tolerance of the mode objective in mode
 #' approximation.
 #' @param averaging_start index to start averaging. Values less then or equal
 #' to zero yields no averaging.
+#' @param fix_seed \code{TRUE} if the same seed should be used. E.g., in
+#' \code{\link{PF_EM}} the same seed will be used in each iteration of the
+#' E-step of the MCEM algorithm.
 #'
 #' @details
 #' The \code{method} argument can take the following values
@@ -1211,14 +1245,14 @@ PF_control <- function(
   method = "AUX_normal_approx_w_cloud_mean", n_max = 25,
   n_threads = getOption("ddhazard_max_threads"), smoother = "Fearnhead_O_N",
   Q_tilde = NULL, est_a_0 = TRUE, N_smooth_final = N_smooth, nu = 0L,
-  covar_fac = -1, ftol_rel = 1e-8, averaging_start = -1L){
+  covar_fac = -1, ftol_rel = 1e-8, averaging_start = -1L, fix_seed = TRUE){
   control <- list(
     N_fw_n_bw = N_fw_n_bw, N_smooth = N_smooth, N_first = N_first, eps = eps,
     forward_backward_ESS_threshold = forward_backward_ESS_threshold,
     method = method, n_max = n_max, n_threads = n_threads, smoother = smoother,
     Q_tilde = Q_tilde, est_a_0 = est_a_0, N_smooth_final = N_smooth_final,
     nu = nu, covar_fac = covar_fac, ftol_rel = ftol_rel,
-    averaging_start = averaging_start)
+    averaging_start = averaging_start, fix_seed = fix_seed)
 
   stopifnot(
     length(method) == 1L, method %in% c(
@@ -1241,12 +1275,12 @@ PF_control <- function(
   stopifnot(
     typeof(N_smooth_final) %in% c("double", "integer"),
     length(N_smooth_final) == 1L, as.integer(N_smooth_final) == N_smooth_final,
-    N_smooth_final <= N_smooth)
-  stopifnot(
+    N_smooth_final <= N_smooth,
     typeof(nu) %in% c("double", "integer"), length(nu) == 1L, nu >= 0L,
     as.integer(nu) == nu, is.numeric(covar_fac), is.numeric(ftol_rel),
     ftol_rel > 0,
-    is.integer(averaging_start))
+    is.integer(averaging_start),
+    is.logical(fix_seed), length(fix_seed) == 1L)
 
   return(control)
 }
@@ -1337,6 +1371,28 @@ get_family_arg <- function(model)
   K
 }
 
+# see https://gist.github.com/boennecd/09ab5b0baae4738089530ae37bc9812e
+.get_dup_mat <- function(n){
+  if(n == 1L)
+    return(as.matrix(1.))
+
+  stopifnot(is.integer(n), n > 1L)
+  nq <- n * (n + 1L) / 2L
+
+  o <- matrix(0L, n, n)
+  o[lower.tri(o, diag = TRUE)] <- 1:nq
+  o[upper.tri(o)] <- t(o)[upper.tri(o)]
+  o <- c(o)
+
+  nn <- n * n
+  out <- matrix(0L, nn, nq)
+  for(i in 1:nn)
+    out[i, o[i]] <- 1L
+
+  out
+}
+
+
 #' @title Compute Time-Invariant Covariance Matrix
 #' @description
 #' Computes the invariant covariance matrix for a vector autoregression model.
@@ -1362,7 +1418,7 @@ get_family_arg <- function(model)
 get_Q_0 <- function(Qmat, Fmat){
   eg  <- eigen(Fmat)
   las <- eg$values
-  if(any(abs(las) >= 1))
+  if(any(Mod(las) >= 1))
     stop("Divergent series")
   U   <- eg$vectors
   T. <- solve(U, t(solve(U, Qmat)))
@@ -1502,9 +1558,9 @@ get_cloud_quantiles.PF_clouds <- function(
 }
 
 
-#' @title Approximate Negative Observation Matrix and Score Vector
+#' @title Approximate Observed Information Matrix and Score Vector
 #' @description
-#' Returns a list of functions to approximate the negative observation matrix
+#' Returns a list of functions to approximate the observed information matrix
 #' and score vector.
 #'
 #' @param object object of class \code{\link{PF_EM}}.
@@ -1514,7 +1570,7 @@ get_cloud_quantiles.PF_clouds <- function(
 #' should be used.
 #'
 #' @details
-#' The score vector and negative observed information matrix are computed
+#' The score vector and observed information matrix are computed
 #' with the (forward)
 #' particle filter. This comes at an \eqn{O(d^2)} variance where \eqn{d}
 #' is the number of periods. Thus, the approximation may be poor for long
@@ -1569,9 +1625,9 @@ get_cloud_quantiles.PF_clouds <- function(
 #' \item{set_n_particles}{sets the number of particles to use in
 #' \code{run_particle_filter} and \code{get_get_score_n_hess} when
 #' \code{use_O_n_sq} is \code{TRUE}.}
-#' \item{get_get_score_n_hess}{computes the approximate negative observation
-#' matrix and score vector. The argument toggles whether the approximate
-#' negative observation matrix should be computed. The last particle cloud
+#' \item{get_get_score_n_hess}{approximate the observed information
+#' matrix and score vector. The argument toggles whether or not to approximate
+#' the observed information matrix. The last particle cloud
 #' from \code{run_particle_filter} is used when \code{use_O_n_sq} is
 #' \code{FALSE}.}
 #'
@@ -1582,24 +1638,26 @@ get_cloud_quantiles.PF_clouds <- function(
 #' # standardize
 #' .lung$age <- scale(.lung$age)
 #'
+#' # fit model
 #' set.seed(43588155)
 #' pf_fit <- PF_EM(
 #'   fixed = Surv(time, status == 2) ~ ph.ecog + age,
-#'   random = ~ age, model = "exponential",
+#'   random = ~ 1, model = "exponential",
 #'   data = .lung, by = 50, id = 1:nrow(.lung),
-#'   Q_0 = diag(1, 2), Q = diag(.5^2, 2), type = "VAR",
-#'   max_T = 800,
+#'   Q_0 = as.matrix(1), Q = as.matrix(.5^2), type = "VAR",
+#'   max_T = 800, Fmat = as.matrix(.5),
 #'   control = PF_control(
 #'     N_fw_n_bw = 250, N_first = 2000, N_smooth = 500, covar_fac = 1.1,
-#'     nu = 6, n_max = 1000L, eps = 1e-5, est_a_0 = FALSE, averaging_start = 100L,
+#'     nu = 6, n_max = 1000L, eps = 1e-4, averaging_start = 200L,
 #'     n_threads = max(parallel::detectCores(logical = FALSE), 1)))
 #'
+#' # compute score and observed information matrix
 #' comp_obj <- PF_get_score_n_hess(pf_fit)
 #' comp_obj$set_n_particles(N_fw = 10000L, N_first = 10000L)
 #' comp_obj$run_particle_filter()
 #' (o1 <- comp_obj$get_get_score_n_hess())
 #'
-#' # O(N^2) method with lower variance
+#' # O(N^2) method with lower variance as a function of time
 #' comp_obj <- PF_get_score_n_hess(pf_fit, use_O_n_sq = TRUE)
 #' comp_obj$set_n_particles(N_fw = 2500L, N_first = 2500L)
 #' (o2 <- comp_obj$get_get_score_n_hess())
@@ -1613,10 +1671,9 @@ get_cloud_quantiles.PF_clouds <- function(
 #'   comp_obj$run_particle_filter()
 #'   comp_obj$get_get_score_n_hess()
 #' }, simplify = FALSE)
-#' sapply(o3, function(x) x$observation$score)
-#' sapply(o3, function(x) sqrt(diag(solve(x$observation$neg_obs_info))))
+#' sapply(o3, function(x) x$score)
+#' sapply(o3, function(x) sqrt(diag(solve(x$obs_info))))
 #' }
-#'
 #' @export
 PF_get_score_n_hess <- function(object, debug = FALSE, use_O_n_sq = FALSE){
   stopifnot(inherits(object, "PF_EM"))
@@ -1654,7 +1711,7 @@ PF_get_score_n_hess <- function(object, debug = FALSE, use_O_n_sq = FALSE){
   model <- if(is.null(org_cl$model)) formals(PF_EM)$model else org_cl$model
   family_arg <- get_family_arg(model)
 
-  # additional
+  # handle additional arguments
   ctrl <- object$control
   seed <- object$seed
   type <- if(is.null(object$call$type))
@@ -1680,7 +1737,8 @@ PF_get_score_n_hess <- function(object, debug = FALSE, use_O_n_sq = FALSE){
   fw_cloud <- object$clouds$forward_clouds
   # runs particle filter and returns the particle clouds
   run_particle_filter <- function(){
-    assign(".Random.seed", seed, envir = .GlobalEnv)
+    if(ctrl$fix_seed)
+      assign(".Random.seed", seed, envir = .GlobalEnv)
     fw_cloud <<- particle_filter(
       fixed_params = fixed_effects, type = type, n_fixed_terms_in_state_vec =
         static_args$n_fixed_terms_in_state_vec, X = static_args$X,
@@ -1693,10 +1751,7 @@ PF_get_score_n_hess <- function(object, debug = FALSE, use_O_n_sq = FALSE){
       method = ctrl$method, n_threads = ctrl$n_threads, Q_tilde = Q_tilde,
       covar_fac = ctrl$covar_fac, ftol_rel = ctrl$ftol_rel)
 
-    structure(list(
-      forward_clouds = fw_cloud, backward_clouds = list(),
-      smoothed_clouds = list(), transition_likelihoods = list()),
-      class = "PF_clouds")
+    .create_PF_clouds(fw_cloud)
   }
 
   # set the number of particles to use
@@ -1725,15 +1780,16 @@ PF_get_score_n_hess <- function(object, debug = FALSE, use_O_n_sq = FALSE){
                    Q_0 = Q_0))
   }
 
-  # return the score and negative Hessian estimates
+  # returns the score and potentially the negative Hessian estimates
   get_get_score_n_hess <- function(only_score = FALSE){
-    assign(".Random.seed", seed, envir = .GlobalEnv)
+    if(ctrl$fix_seed)
+      assign(".Random.seed", seed, envir = .GlobalEnv)
     cpp_res <- PF_get_score_n_hess_cpp(
       fw_cloud = fw_cloud, Q = Q, F = Fmat,
       risk_obj = static_args$risk_obj, ran_vars = static_args$X,
       fixed_terms = static_args$fixed_terms, tstart = static_args$tstart,
       tstop = static_args$tstop, fixed_params = fixed_effects,
-      max_threads = object$control$n_threads, family = family_arg,
+      max_threads = ctrl$n_threads, family = family_arg,
       debug = debug, only_score = only_score, a_0 = a_0, R = R,
       Q_0 = Q_0, Q_tilde = Q_tilde, N_fw_n_bw = N_fw, N_first = N_first,
       nu = ctrl$nu, covar_fac = ctrl$covar_fac, ftol_rel = ctrl$ftol_rel,
@@ -1741,29 +1797,50 @@ PF_get_score_n_hess <- function(object, debug = FALSE, use_O_n_sq = FALSE){
       forward_backward_ESS_threshold = ctrl$forward_backward_ESS_threshold,
       use_O_n_sq = use_O_n_sq)
 
-    d <- ncol(Q)
-    K <- matrix(0., 2L * d * d, 2L * d * d)
-    K[1:(d * d), 1:(d * d)] <- .get_cum_mat(d, d)
-    if(d > 1)
-      diag(K[-(1:(d * d)), -(1:(d * d))]) <- 1 else
-        K[-(1:(d * d)), -(1:(d * d))] <- 1
-    score_state <- K %*% drop(cpp_res$S_state)
-    neg_obs_info_state <- with(
-      cpp_res,
-      tcrossprod(S_state) - E_second_deriv_state - E_score_outer_state)
-    neg_obs_info_state <- tcrossprod(K %*% neg_obs_info_state, K)
+    # compute observed information matrix and score vector. We have
+    # to: multiply parts of them part it by a commutation, and parts by
+    # a duplication matrix
 
-    score_obs <- drop(cpp_res$S_obs)
-    neg_obs_obs <- with(
-      cpp_res,
-      tcrossprod(score_obs) - E_second_deriv_obs - E_score_outer_obs)
-    names(score_obs) <- rownames(neg_obs_obs) <- colnames(neg_obs_obs) <-
-      names(fixed_effects)
+    # first define a few lengths
+    dfix <- length(fixed_effects)
+    n_rng <- NCOL(Q)
+    drng <- 2L * n_rng * n_rng
+    org_dim <- dfix + drng
 
-    list(
-      state = list(
-        score = drop(score_state), neg_obs_info = neg_obs_info_state),
-      observation = list(score = score_obs, neg_obs_info = neg_obs_obs))
+    # output dimension and matrix to multiply objects by
+    out_dim <- dfix + n_rng * n_rng + (n_rng * (n_rng + 1L)) / 2L
+    trans_mat <- matrix(0, out_dim, org_dim)
+
+    ifix <- 1:dfix
+    trans_mat[ifix, ifix]          <- diag(dfix)
+    # TODO: avoid this by changing other computations in c++
+    idF  <- dfix + 1:(n_rng * n_rng)
+    trans_mat[idF, idF]            <- .get_cum_mat(n_rng, n_rng)
+    idQ <- dfix + n_rng * n_rng + 1:((n_rng * (n_rng + 1L)) / 2L)
+    trans_mat[idQ, -c(ifix, idF)] <- t(.get_dup_mat(n_rng))
+
+    # transform objects
+    score <- cpp_res$score <- drop(trans_mat %*% cpp_res$score)
+    cpp_res$score_outer <- tcrossprod(
+      trans_mat %*% cpp_res$score_outer, trans_mat)
+    cpp_res$hess_terms <- tcrossprod(
+      trans_mat %*% cpp_res$hess_terms, trans_mat)
+
+    # compute output and return
+    obs_info <- with(cpp_res,
+                     tcrossprod(score) - score_outer - hess_terms)
+
+    # set names
+    fnames <- rownames(static_args$fixed_terms)
+    rnames <- rownames(static_args$X)
+    dnames <- c(fnames,
+                outer(rnames, rnames, function(x, y) paste0("F:", x, ".", y)))
+    tmp <- outer(rnames, rnames, function(x, y) paste0("Q:", x, ".", y))
+    dnames <- c(dnames, tmp[lower.tri(tmp, diag = TRUE)])
+    names(score) <- dnames
+    dimnames(obs_info) <- list(dnames, dnames)
+
+    list(score = score, obs_info = obs_info)
   }
 
   list(

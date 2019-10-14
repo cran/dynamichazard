@@ -111,7 +111,7 @@ test_that("PF_smooth gives same results", {
   fw_args <- c(fw_args, args[
     intersect(names(args), names(formals(PF_forward_filter.formula)))])
 
-  test_func <- function(test_file_name, update = FALSE){
+  test_func <- function(test_file_name, update = do_update_tests){
     get_func <- quote(
       function(x){
         cloud <- bquote(.(substitute(x)))
@@ -351,7 +351,7 @@ test_that("PF_EM gives previous results on head neck data set", {
     max_T = 45)
 
   test_func <- function(
-    smoother, file_name, do_update = FALSE, do_print_fname = FALSE){
+    smoother, file_name, do_update = do_update_tests, do_print_fname = FALSE){
     f1 <- paste0("local_tests/", file_name)
     f2 <- paste0(file_name, "_cloud_means")
 
@@ -440,7 +440,7 @@ test_that("compute_PF_summary_stats gives previous results", {
   a_0 <- c(-3.6, 0)
   R <- diag(1, 2)
 
-  test_func <- function(data_file, test_file, do_update = FALSE){
+  test_func <- function(data_file, test_file, do_update = do_update_tests){
     q <- bquote({
       test_if_file_exists(
         .(data_file),
@@ -763,8 +763,11 @@ test_that("A few iterations with `type = \"VAR\"' yields the same as before", {
       Q_tilde = diag(.3^2, 2), n_threads = 4)))
 
   # old <- readRDS(file.path("previous_results", "PF_VARS.RDS"))
-  expect_known_value(pf_Fear[!names(pf_Fear) %in% "clouds"],
-                     file = "PF_VARS.RDS")
+  expect_known_value(pf_Fear[!names(pf_Fear) %in% c("clouds", "terms")],
+                     file = "PF_VARS.RDS",
+                     # low tol because of a large difference on Solaris.
+                     # Likely due to re-sampling being triggered at some point
+                     tolerance = 1e-3)
 })
 
 test_that("Commutation matrix is correct", {
@@ -860,8 +863,10 @@ test_that("type = 'VAR' works with non-zero mean with a single term and gives pr
 
   # old <- readRDS(file.path(
   #    "previous_results", "PF_VARS_non_zero_mean_inter.RDS"))
-  expect_known_value(pf_Fear[!names(pf_Fear) %in% "clouds"],
-                     file = "PF_VARS_non_zero_mean_inter.RDS")
+  expect_known_value(pf_Fear[!names(pf_Fear) %in% c("clouds", "terms")],
+                     file = "PF_VARS_non_zero_mean_inter.RDS",
+
+                     )
 
   pf_Fear <- suppressWarnings(PF_EM(
     Surv(start, stop, event) ~ group + ddFixed(group) + ddFixed_intercept(),
@@ -875,8 +880,11 @@ test_that("type = 'VAR' works with non-zero mean with a single term and gives pr
 
   # old <- readRDS(file.path(
   #    "previous_results", "PF_VARS_non_zero_mean_slope.RDS"))
-  expect_known_value(pf_Fear[!names(pf_Fear) %in% "clouds"],
-                     file = "PF_VARS_non_zero_mean_slope.RDS")
+  expect_known_value(pf_Fear[!names(pf_Fear) %in% c("clouds", "terms")],
+                     file = "PF_VARS_non_zero_mean_slope.RDS",
+                     # low tol because of a large difference on Solaris.
+                     # Likely due to re-sampling being triggered at some point
+                     tolerance = 1e-3)
 })
 
 test_that("Using `n_smooth_final` works as expected and yields previous results", {
@@ -895,7 +903,7 @@ test_that("Using `n_smooth_final` works as expected and yields previous results"
       n_max = 1, eps = .001, Q_tilde = diag(.2^2, 2), est_a_0 = FALSE,
       n_threads = 1)))
 
-  expect_known_value(f_fit_1[!names(f_fit_1) %in% c("clouds", "call")],
+  expect_known_value(f_fit_1[!names(f_fit_1) %in% c("clouds", "call", "terms")],
                      file = "n_smooth_final_RW.RDS")
 
   # # compare with the following after you change `n_max`
@@ -941,8 +949,10 @@ test_that("Using `n_smooth_final` works as expected and yields previous results"
 
   # old <- readRDS(file.path(
   #    "previous_results", "n_smooth_final_VAR.RDS"))
-  expect_known_value(f_fit_2[!names(f_fit_2) %in% c("clouds", "call")],
-                     file = "n_smooth_final_VAR.RDS")
+  expect_known_value(
+    f_fit_2[!names(f_fit_2) %in% c("clouds", "call", "terms", "fixed",
+                                   "random")],
+    file = "n_smooth_final_VAR.RDS")
 })
 
 test_that("sampling with a t-distribution gives previous results", {
@@ -965,7 +975,7 @@ test_that("sampling with a t-distribution gives previous results", {
     tail(t_fit$effective_sample_size$backward_clouds, 1),
     length(tail(t_fit$clouds$backward_clouds, 1)[[1L]]$weights))
 
-  expect_known_value(t_fit[!names(t_fit) %in% c("clouds", "call")],
+  expect_known_value(t_fit[!names(t_fit) %in% c("clouds", "call", "terms")],
                      file = "pf_t_dist_proposal.RDS")
 })
 
@@ -1350,6 +1360,7 @@ test_that("combining prior and backwards works", {
 test_that("mode approximations give expected result", {
   skip_if(!dir.exists("pf-internals"))
   skip_if_not_installed("mvtnorm")
+  skip_if_not_installed("nloptr")
 
   p <- c(-.5, 0)
   c1 <- c(-.4, 1)
@@ -1464,29 +1475,6 @@ test_that("mode approximations give expected result", {
 
   expect_equal(cpp_out$log_dens1, dmvt(p, o1$mu, Q_res, nu, TRUE))
   expect_equal(cpp_out$log_dens2, dmvt(p, o2$mu, Q_res, nu, TRUE))
-
-  #####
-  # lower threshold in mode approximation
-  ftol_rel <- 1e-3
-  app <- approximator(bwo, prio, y_dist, start = app1(c1, NULL)$mu,
-                      ftol_rel = ftol_rel)
-  o1 <- app(c1, NULL)
-  o2 <- app(c2, NULL)
-  cpp_out <- with(o, check_prior_bw_state_comb(
-    X = X, is_event = y_use, offsets = offset, tstart = tstart,
-    tstop = tstop, bin_start = bin_start, bin_stop = bin_stop, fam = fam,
-    F = F., Q = Q, Q_0 = Q_0, m_0 = m_0, child = c1, child1 = c2, parent = p,
-    t1 = t1, Q_xtra = Q_xtra, ftol_rel = ftol_rel))
-
-  expect_equal(drop(cpp_out$mean1), o1$mu)
-  expect_equal(drop(cpp_out$mean2), o2$mu)
-
-  Q_res <- o1$Sig + Q_xtra
-  expect_equal(cpp_out$covar1, Q_res)
-  expect_equal(cpp_out$covar2, Q_res)
-
-  expect_equal(cpp_out$log_dens1, dmvnorm(p, o1$mu, Q_res, TRUE))
-  expect_equal(cpp_out$log_dens2, dmvnorm(p, o2$mu, Q_res, TRUE))
 })
 
 test_that("'PF_get_score_n_hess' gives the same as an R implementation", {
@@ -1525,7 +1513,7 @@ test_that("'PF_get_score_n_hess' gives the same as an R implementation", {
     static_args <- eval(sta_arg_call)
     fw <- fit$clouds$forward_clouds
 
-    a_sta_old <- B_sta_old <- a_obs_old <- B_obs_old <- NULL
+    scores_old <- hess_old <- NULL
     k <- length(fit$F)
     K <- solve(fit$Q)
     K1_2 <- K / 2
@@ -1542,32 +1530,27 @@ test_that("'PF_get_score_n_hess' gives the same as an R implementation", {
 
       eta <- drop(crossprod(Z_i, fit$fixed_effects))
 
+      nf <- NROW(Z_i)
+      score_dim <- nf + k * 2L
+      scores <- matrix(0., ncol(ps), score_dim)
+      hess <- array(0, c(score_dim, score_dim, ncol(ps)))
+
       #####
       # state equation
-      a_sta <- matrix(0., ncol(ps), k * 2L)
-      B_sta <- array(0, c(k * 2L, k * 2L, ncol(ps)))
       r0 <- ps - fit$F %*% parents
       r1 <- solve(fit$Q, r0)
       for(j in 1:ncol(ps)){
-        a_sta[j, 1:k] <- tcrossprod(parents[, j], r1[, j])
-        a_sta[j, 1:k + k] <-
+        scores[j, nf + 1:k] <- tcrossprod(parents[, j], r1[, j])
+        scores[j, nf + 1:k + k] <-
           solve(fit$Q, tcrossprod(r0[, j] * .5, r1[, j]) - diag(.5, k / 2L))
 
-        B_sta[1:k, 1:k, j] <- - kronecker(K, tcrossprod(parents[, j]))
+        hess[nf + 1:k, nf + 1:k, j] <- - kronecker(K, tcrossprod(parents[, j]))
         off_block <- - kronecker(K, tcrossprod(r1[, j], parents[, j]))
-        B_sta[1:k + k, 1:k, j    ] <- off_block
-        B_sta[1:k    , 1:k + k, j] <- t(off_block)
-        B_sta[1:k + k, 1:k + k, j] <-
+        hess[nf + 1:k + k, nf + 1:k    , j] <- off_block
+        hess[nf + 1:k    , nf + 1:k + k, j] <- t(off_block)
+        hess[nf + 1:k + k, nf + 1:k + k, j] <-
           - kronecker(K, tcrossprod(r1[, j]) - K1_2)
       }
-
-      if(!is.null(a_sta_old))
-        a_sta <- a_sta + a_sta_old[par_idx, ]
-      if(!is.null(B_sta_old))
-        B_sta <- B_sta + B_sta_old[, , par_idx]
-
-      a_sta_old <- a_sta
-      B_sta_old <- B_sta
 
       #####
       # observational equation
@@ -1576,55 +1559,47 @@ test_that("'PF_get_score_n_hess' gives the same as an R implementation", {
         exp_eta <- exp(eta)
         drop(crossprod((exp_eta * (y_i - 1) + y_i) / (1 + exp_eta), t(Z_i)))
       })
-      if(!is.matrix(a_obs))
-        a_obs <- as.matrix(a_obs) else a_obs <- t(a_obs)
+      scores[, 1:nf] <- if(!is.matrix(a_obs)) as.matrix(a_obs) else t(a_obs)
       B_obs <- apply(ps, 2, function(x){
         eta <- eta + drop(crossprod(X_i, x))
         exp_eta <- exp(eta)
         crossprod(-t(Z_i) * exp(eta) / (1 + exp(eta))^2, t(Z_i))
       })
-      B_obs <- array(B_obs, dim = c(NCOL(a_obs), NCOL(a_obs), NROW(a_obs)))
+      hess[1:nf, 1:nf, ] <- array(B_obs, dim = c(nf, nf, dim(hess)[[3]]))
 
-      if(!is.null(a_obs_old))
-        a_obs <- a_obs + a_obs_old[par_idx, ]
-      if(!is.null(B_obs_old))
-        B_obs <- B_obs + B_obs_old[, , par_idx]
+      if(!is.null(scores_old))
+        scores <- scores + scores_old[par_idx, ]
+      if(!is.null(hess_old))
+        hess <- hess + hess_old[, , par_idx]
 
-      a_obs_old <- a_obs
-      B_obs_old <- B_obs
+      scores_old <- scores
+      hess_old   <- hess
     }
 
-    #####
-    # state equation
     ws <- drop(tail(fw, 1)[[1L]]$weights)
-    S_state <- colSums(a_sta * ws)
+    score <- colSums(scores * ws)
 
-    info_obj_sta <- matrix(0., NCOL(a_sta), NCOL(a_sta))
+    info_obj <- matrix(0., NCOL(scores), NCOL(scores))
     for(i in seq_along(ws))
-      info_obj_sta <-
-      info_obj_sta + ws[i] * (tcrossprod(a_sta[i, ]) + B_sta[, , i])
+      info_obj <-
+        info_obj + ws[i] * (tcrossprod(scores[i, ]) + hess[, , i])
 
-    d <- ncol(fit$Q)
-    K <- matrix(0., 2L * d * d, 2L * d * d)
-    K[1:(d * d), 1:(d * d)] <- dynamichazard:::.get_cum_mat(d, d)
-    diag(K[-(1:(d * d)), -(1:(d * d))]) <- 1
+    dfix <- NROW(Z_i)
+    n_rng <- NROW(X_i)
+    out_dim <- dfix + n_rng * n_rng + (n_rng * (n_rng + 1L)) / 2L
+    trans_mat <- matrix(0, out_dim, length(score))
 
-    S_state <- drop(K %*% S_state)
-    info_obj_sta <- tcrossprod(K %*% info_obj_sta, K)
+    ifix <- 1:dfix
+    trans_mat[ifix, ifix]          <- diag(dfix)
+    idF  <- dfix + 1:(n_rng * n_rng)
+    trans_mat[idF, idF]            <- dynamichazard:::.get_cum_mat(n_rng, n_rng)
+    idQ <- dfix + n_rng * n_rng + 1:((n_rng * (n_rng + 1L)) / 2L)
+    trans_mat[idQ, -c(ifix, idF)] <- t(dynamichazard:::.get_dup_mat(n_rng))
 
-    #####
-    # observation equation
-    S_obj <- colSums(a_obs * ws)
-    info_obj_obj <- matrix(0., NCOL(a_obs), NCOL(a_obs))
-    for(i in seq_along(ws))
-      info_obj_obj <-
-      info_obj_obj + ws[i] * (tcrossprod(a_obs[i, ]) + B_obs[, , i])
-
+    obs_info = tcrossprod(score) - info_obj
     list(
-      state = list(score =
-                     S_state, neg_obs_info = tcrossprod(S_state) - info_obj_sta),
-      observation = list(
-        score = S_obj, neg_obs_info = tcrossprod(S_obj) - info_obj_obj))
+      score = drop(trans_mat %*% score),
+      obs_info = tcrossprod(trans_mat %*% obs_info, trans_mat))
   }
 
   test_out <- test_logit_func(pf_fit)
@@ -1635,8 +1610,95 @@ test_that("'PF_get_score_n_hess' gives the same as an R implementation", {
                check.attributes = FALSE)
 
   # only score
-  test_out$state$neg_obs_info[] <- NA_real_
-  test_out$observation$neg_obs_info[] <- NA_real_
+  test_out$obs_info[] <- NA_real_
   expect_equal(test_out, func_out$get_get_score_n_hess(only_score = TRUE),
                check.attributes = FALSE)
+})
+
+test_that("warns with randow walk model when covariates are in both fixed and random", {
+  skip_on_cran()
+
+  set.seed(43588155)
+  expect_warning(
+    pf_fit <- PF_EM(
+      fixed = Surv(tstart, tstop, death == 2) ~
+        age + edema  + log(albumin) + log(protime) + log(bili),
+      random = ~ log(bili),
+      data = pbc2, Q_0 = diag(1, 2), Q = diag(1, 2),
+      by = 50L, id = pbc2$id, a_0 = c(0, 0),
+      fixed_effects = c(-15, 0, 0, 0, 0, 0),
+      model = "exponential", max_T = 100L,
+      control = PF_control(
+        N_fw_n_bw = 50, N_smooth = 50, N_first = 50, eps = 1e-3,
+        method = "AUX_normal_approx_w_cloud_mean", est_a_0 = FALSE,
+        n_max = 1L)),
+    regexp = "The following terms are in both 'fixed' and 'random' with 'type = \"RW\"':  'intercept', 'log(bili)'",
+    fixed = TRUE)
+})
+
+test_that("works when there are time periods outside where we have data and with a single fixed and random effect", {
+  skip_on_cran()
+  dir <- "local_tests"
+  skip_if_not(dir.exists(file.path("previous_results", dir)))
+
+  cap_ti <- 20L
+  head_neck_cancer <- subset(head_neck_cancer, stop < cap_ti)
+
+  set.seed(43588155)
+  suppressWarnings(pf_fit <- PF_EM(
+    fixed = Surv(start, stop, event) ~ 1, random = ~ I((group == 2) + 0.) - 1,
+    data = head_neck_cancer, Q_0 = diag(1, 1), Q = diag(0.0923169242234624, 1),
+    fixed_effects = -2.68255823834327,
+    a_0 = -0.745106571679811,
+    by = 1L, id = head_neck_cancer$id, type = "RW",
+    model = "cloglog", max_T = cap_ti + 6L,
+    control = PF_control(
+      N_fw_n_bw = 400, N_smooth = 1000L, N_first = 1000L,
+      method = "AUX_normal_approx_w_cloud_mean", est_a_0 = FALSE,
+      n_max = 1L)))
+
+  expect_known_value(
+    get_cloud_means(pf_fit), file.path(dir, "pf-rw-w-no-obs-periods.RDS"))
+})
+
+test_that("'fix_seed = FALSE' yields different results at each call", {
+  skip_on_cran()
+
+  set.seed(seed <- 1L)
+  same_seed_call <- suppressWarnings(
+    PF_EM(fixed = Surv(stop, event) ~ group, random = ~ 1, model = "logit",
+          max_T = 30L, by = 1L, data = head_neck_cancer,
+          Q = as.matrix(1), Fmat = as.matrix(.9),
+          type = "VAR", control = PF_control(
+            N_fw_n_bw = 100L, N_smooth = 100L, N_first = 100L, n_max = 3L,
+            fix_seed = TRUE)))
+
+  call_2 <- same_seed_call$call
+  call_2[["control"]]$fix_seed <- FALSE
+  set.seed(seed)
+  diff_seed <- suppressWarnings(eval(call_2, environment()))
+
+  # just check one element
+  expect_equal(diff_seed$EM_ests     $fixed_effects[1, ],
+               same_seed_call$EM_ests$fixed_effects[1, ])
+
+  expect_true(!isTRUE(all.equal(
+    diff_seed$EM_ests     $fixed_effects[-1, ],
+    same_seed_call$EM_ests$fixed_effects[-1, ])))
+
+  # check particle filter
+  f1 <- PF_forward_filter(diff_seed, N_fw = 100L, N_first = 100L)
+  f2 <- PF_forward_filter(diff_seed, N_fw = 100L, N_first = 100L)
+  expect_true(!isTRUE(all.equal(f1, f2)))
+
+  # check score and Hessian method
+  o <- PF_get_score_n_hess(diff_seed)
+  o$set_n_particles(N_fw = 100L, N_first = 100L)
+  expect_true(!isTRUE(all.equal(o$run_particle_filter(),
+                                o$run_particle_filter())))
+
+  o <- PF_get_score_n_hess(diff_seed, use_O_n_sq = TRUE)
+  o$set_n_particles(N_fw = 50L, N_first = 50L)
+  expect_true(!isTRUE(all.equal(o$get_get_score_n_hess(),
+                                o$get_get_score_n_hess())))
 })

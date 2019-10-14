@@ -2,7 +2,7 @@
 % Please edit documentation in R/PF.R
 \name{PF_get_score_n_hess}
 \alias{PF_get_score_n_hess}
-\title{Approximate Negative Observation Matrix and Score Vector}
+\title{Approximate Observed Information Matrix and Score Vector}
 \usage{
 PF_get_score_n_hess(object, debug = FALSE, use_O_n_sq = FALSE)
 }
@@ -25,18 +25,18 @@ matrix. The second argument is the fixed effect coefficients.}
 \item{set_n_particles}{sets the number of particles to use in
 \code{run_particle_filter} and \code{get_get_score_n_hess} when
 \code{use_O_n_sq} is \code{TRUE}.}
-\item{get_get_score_n_hess}{computes the approximate negative observation
-matrix and score vector. The argument toggles whether the approximate
-negative observation matrix should be computed. The last particle cloud
+\item{get_get_score_n_hess}{approximate the observed information
+matrix and score vector. The argument toggles whether or not to approximate
+the observed information matrix. The last particle cloud
 from \code{run_particle_filter} is used when \code{use_O_n_sq} is
 \code{FALSE}.}
 }
 \description{
-Returns a list of functions to approximate the negative observation matrix
+Returns a list of functions to approximate the observed information matrix
 and score vector.
 }
 \details{
-The score vector and negative observed information matrix are computed
+The score vector and observed information matrix are computed
 with the (forward)
 particle filter. This comes at an \eqn{O(d^2)} variance where \eqn{d}
 is the number of periods. Thus, the approximation may be poor for long
@@ -65,24 +65,26 @@ library(dynamichazard)
 # standardize
 .lung$age <- scale(.lung$age)
 
+# fit model
 set.seed(43588155)
 pf_fit <- PF_EM(
   fixed = Surv(time, status == 2) ~ ph.ecog + age,
-  random = ~ age, model = "exponential",
+  random = ~ 1, model = "exponential",
   data = .lung, by = 50, id = 1:nrow(.lung),
-  Q_0 = diag(1, 2), Q = diag(.5^2, 2), type = "VAR",
-  max_T = 800,
+  Q_0 = as.matrix(1), Q = as.matrix(.5^2), type = "VAR",
+  max_T = 800, Fmat = as.matrix(.5),
   control = PF_control(
     N_fw_n_bw = 250, N_first = 2000, N_smooth = 500, covar_fac = 1.1,
-    nu = 6, n_max = 1000L, eps = 1e-5, est_a_0 = FALSE, averaging_start = 100L,
+    nu = 6, n_max = 1000L, eps = 1e-4, averaging_start = 200L,
     n_threads = max(parallel::detectCores(logical = FALSE), 1)))
 
+# compute score and observed information matrix
 comp_obj <- PF_get_score_n_hess(pf_fit)
 comp_obj$set_n_particles(N_fw = 10000L, N_first = 10000L)
 comp_obj$run_particle_filter()
 (o1 <- comp_obj$get_get_score_n_hess())
 
-# O(N^2) method with lower variance
+# O(N^2) method with lower variance as a function of time
 comp_obj <- PF_get_score_n_hess(pf_fit, use_O_n_sq = TRUE)
 comp_obj$set_n_particles(N_fw = 2500L, N_first = 2500L)
 (o2 <- comp_obj$get_get_score_n_hess())
@@ -96,10 +98,9 @@ o3 <- replicate(10L, {
   comp_obj$run_particle_filter()
   comp_obj$get_get_score_n_hess()
 }, simplify = FALSE)
-sapply(o3, function(x) x$observation$score)
-sapply(o3, function(x) sqrt(diag(solve(x$observation$neg_obs_info))))
+sapply(o3, function(x) x$score)
+sapply(o3, function(x) sqrt(diag(solve(x$obs_info))))
 }
-
 }
 \references{
 Cappe, O. and Moulines, E. (2005) Recursive Computation of the Score and

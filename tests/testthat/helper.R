@@ -1,3 +1,5 @@
+suppressWarnings(RNGversion("3.5.0"))
+
 # Run before test
 # See https://github.com/hadley/testthat/issues/544#issuecomment-260053774
 
@@ -89,6 +91,8 @@ qu <- quote({
     paste0(dir, file)
   })})
 
+
+do_update_tests <- FALSE
 if(packageVersion("testthat") >= "1.0.2.9000"){
   trace(
     what = testthat::expect_known_value, at = 2, print = FALSE,
@@ -98,9 +102,9 @@ if(packageVersion("testthat") >= "1.0.2.9000"){
     tracer = qu)
 
   expect_known_value <- testthat::expect_known_value
-  formals(expect_known_value)$update <- FALSE
+  formals(expect_known_value)$update <- do_update_tests
   expect_known_output <- testthat::expect_known_output
-  formals(expect_known_output)$update <- FALSE
+  formals(expect_known_output)$update <- do_update_tests
 
 } else {
   trace(
@@ -111,9 +115,9 @@ if(packageVersion("testthat") >= "1.0.2.9000"){
     tracer = qu)
 
   expect_known_value <- testthat::expect_equal_to_reference
-  formals(expect_known_value)$update <- FALSE
+  formals(expect_known_value)$update <- do_update_tests
   expect_known_output <- testthat::expect_output_file
-  formals(expect_known_output)$update <- FALSE
+  formals(expect_known_output)$update <- do_update_tests
 
 }
 

@@ -7,8 +7,6 @@
 #include "cond_approx.h"
 #include <set>
 
-#define MAX(a,b) (((a)>(b))?(a):(b))
-
 struct normalize_weights_output {
   double ESS = 0.;
   double log_sum_logs;
@@ -26,7 +24,7 @@ inline normalize_weights_output normalize_weights(T &container, const double max
   double norm_constant = 0;
   for(auto it = container.begin(); it != container.end(); ++it, ++w){
     /* back transform weights */
-    *w = MAX(exp(F::get(*it) - max_weight), std::numeric_limits<double>::epsilon());
+    *w = exp(F::get(*it) - max_weight);
 
     norm_constant += *w;
   }
@@ -116,7 +114,6 @@ struct nothing {};
 
 struct get_approx_use_mean_output {
   std::vector<std::unique_ptr<dist_comb>> dists;
-  nlopt_return_value_msg msg;
 };
 
 template<bool is_forward>
@@ -125,7 +122,6 @@ get_approx_use_mean_output get_approx_use_mean(
 
 struct get_approx_use_particle_output {
   std::vector<std::unique_ptr<dist_comb>> dists;
-  nlopt_return_value_msgs msgs;
 };
 template<bool is_forward>
 get_approx_use_particle_output get_approx_use_particle(
@@ -190,6 +186,8 @@ cloud re_sample_cloud(const unsigned int, const cloud);
 
 /* ------------------------------------------- */
 
+/* function used when sub-sampling has been performed. Returns a map with
+ * indicies of those that are still included and their adjusted weight */
 template
   <class TContainer,
    double (*FWeight)(const typename TContainer::value_type&),
@@ -214,17 +212,16 @@ template
 
     }
 
-    double max_weight = std::numeric_limits<double>::epsilon();
-    for(auto x : count){
+    double max_weight = -std::numeric_limits<double>::infinity();
+    for(auto &x : count){
       out[x.first] += std::log(x.second);
-      max_weight = MAX(max_weight, out[x.first]);
+      max_weight = std::max(max_weight, out[x.first]);
     }
 
-    /* renormalize */
+    /* re-normalize */
     double norm_constant = 0;
     for(auto &x : out){
-      x.second = MAX(
-        exp(x.second - max_weight), std::numeric_limits<double>::epsilon());
+      x.second = exp(x.second - max_weight);
 
       norm_constant += x.second;
     }
@@ -246,11 +243,10 @@ std::vector<std::set<arma::uword> > get_ancestors
 
 class score_n_hess_base {
 public:
-  virtual const arma::mat &get_a_state() const = 0;
-  virtual const arma::mat &get_a_obs() const = 0;
-  virtual const arma::mat &get_B_state() const = 0;
-  virtual const arma::mat &get_B_obs() const = 0;
-  virtual const double get_weight() const = 0;
+  virtual const arma::vec &get_score() const = 0;
+  /* the betas in https://doi.org/10.1093/biomet/asq062 */
+  virtual const arma::mat &get_hess_terms() const = 0;
+  virtual double get_weight() const = 0;
 
   virtual ~score_n_hess_base() = default;
 };

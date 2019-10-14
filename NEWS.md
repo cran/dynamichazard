@@ -1,3 +1,18 @@
+# dynamichazard 0.6.6
+* two errors in `PF_get_score_n_hess` are fixed. One is that a off diagonal 
+  block in the observed information matrix was not computed. The other is that
+  parts of the score and observed information matrix was only correct if 
+  parts of them were multiplied by the duplication matrix.
+* `nlopt` is no longer used in mode optimization. A Newton–Raphson method 
+  is used instead. This seems a bit faster in some cases and does not fail in 
+  some cases where `nlopt` did.
+* A `fix_seed` argument is added to `PF_control`. `fix_seed = FALSE` combined
+  with averaging and a low number of particles seems to yield better results.
+* fixed a bug in `PF_EM` when some periods do not have any observations.
+
+# dynamichazard 0.6.5
+* Minor bug fixes.
+
 # dynamichazard 0.6.4
 * Particle filtering implementation is changed. One may get slightly different 
   results.
