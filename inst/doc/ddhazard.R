@@ -1,4 +1,4 @@
-## ----setup, include=FALSE------------------------------------------------
+## ----setup, include=FALSE-----------------------------------------------------
 knitr::knit_hooks$set(default_opts = function(before, options, envir) {
     if (before){
       options(digist = 4)
@@ -19,7 +19,7 @@ knitr::opts_chunk$set(
   echo = TRUE, warning = F, message = F, dpi = 126, fig.height=3.5, fig.width = 6)
 knitr::opts_knit$set(warning = F, message = F,  default_opts = T)
 
-## ----echo=FALSE----------------------------------------------------------
+## ----echo=FALSE---------------------------------------------------------------
 tryCatch({
   current_sha <- system("git rev-parse --short HEAD", intern = TRUE)
   if(grepl("^fatal: Not a git repository", current_sha))
@@ -30,10 +30,10 @@ current_version <- paste0(
   "boennecd/dynamichazard", if(nchar(current_sha) > 0) "@" else "",
   current_sha)
 
-## ----eval=FALSE----------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  install.packages("dynamichazard")
 
-## ----echo=FALSE----------------------------------------------------------
+## ----echo=FALSE---------------------------------------------------------------
 library(survival)
 source("../R/sims.R")
 
@@ -57,12 +57,12 @@ simple_ex <- test_sim_func_logit(
 stopifnot(any(simple_ex$event[simple_ex$id == 1] == 1) &&
               all(simple_ex$event[simple_ex$id == 2] == 0))
 
-## ----echo = FALSE, results='asis'----------------------------------------
+## ----echo = FALSE, results='asis'---------------------------------------------
 knitr::kable(
   head(simple_ex, 10), digits = 4, format = "latex",
   booktabs = T, row.names = FALSE, align = rep("r", 6))
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 library(dynamichazard)
 dd_fit_short <- ddhazard(
   Surv(time, status == 2) ~ log(bili), # Formula like for coxph from survival
@@ -78,7 +78,7 @@ dd_fit_short <- ddhazard(
 # Print diagonal of covariance matrix
 diag(dd_fit_short$Q)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 library(dynamichazard)
 dd_fit_wide <- ddhazard(
   Surv(time, status == 2) ~ log(bili),
@@ -95,7 +95,7 @@ Q_short <- sqrt(diag(dd_fit_short$Q))
 Q_wide <- sqrt(diag(dd_fit_wide$Q))
 (Q_wide - Q_short) / Q_short
 
-## ----fig.align='center', fig.height=2.5----------------------------------
+## ----fig.align='center', fig.height=2.5---------------------------------------
 par(mfcol = c(1, 2), mar = c(5, 4, 1, 1), cex = .75)
 
 for(i in 1:2){
@@ -103,7 +103,7 @@ for(i in 1:2){
   plot(dd_fit_wide, cov_index = i, col = "DarkBlue", add = T)
 }
 
-## ----eval=FALSE----------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  dynamichazard::ddhazard_app()
 
 ## ----binning_fig, echo=FALSE, results="hide", fig.cap = "Illustration of going from event times to binary variables. Each horizontal line represents an individual. A cross indicates that new covariates are observed while a filled circle indicates that the individual have died. Open circles indicates that the individual is right-censored. Vertical dashed lines are time interval borders.", fig.height=3, fig.align="center"----

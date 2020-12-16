@@ -1,3 +1,7 @@
+# dynamichazard 0.6.7
+* solve issue because of changes in `all.equal`.
+* fix other minor issues with test on CRAN.
+
 # dynamichazard 0.6.6
 * two errors in `PF_get_score_n_hess` are fixed. One is that a off diagonal 
   block in the observed information matrix was not computed. The other is that

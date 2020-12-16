@@ -1,4 +1,4 @@
-## ----setup, include=FALSE------------------------------------------------
+## ----setup, include=FALSE-----------------------------------------------------
 hook_output <- knitr::knit_hooks$get("output")
 knitr::knit_hooks$set(output = function(x, options) {
    lines <- options$output.lines
@@ -53,21 +53,21 @@ knit_print.matrix <- function(x, ..., digits = getOption("digits"), row.names = 
   knitr::asis_output(res)
 }
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 load("Diagnostics/Rossi.RData")
 
 # We only keep some of the columns
 Rossi <- Rossi[
   , c("id","start","stop","event", "fin", "age", "prio", "employed.cumsum")]
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # Number of unique individauls
 length(unique(Rossi$id)) 
 
 # Show example for a given individual
 Rossi[Rossi$id == 2, ]
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # See the varying and non-varying covariates
 # The output shows the mean number of unique values for each individual
 tmp <- 
@@ -75,16 +75,16 @@ tmp <-
     apply(dat, 2, function(x) sum(!duplicated(x))))
 colMeans(do.call(rbind, as.list(tmp)))
 
-## ---- echo = FALSE-------------------------------------------------------
+## ---- echo = FALSE------------------------------------------------------------
 # Indivuals are observed for at most one year
 stopifnot(setequal(unique(Rossi$stop), 1:52))
 
-## ---- echo = FALSE-------------------------------------------------------
+## ---- echo = FALSE------------------------------------------------------------
 # Individuals have event through out the period
 plot(xtabs(~ Rossi$stop[Rossi$event == 1]), xlab = "Week number", 
      ylab = "Number of recidivism")
 
-## ---- echo = FALSE-------------------------------------------------------
+## ---- echo = FALSE------------------------------------------------------------
 # All individuals have gabs of one week 
 stopifnot(all(
   unlist(tapply(Rossi$stop, Rossi$id, diff)) == 1))
@@ -100,7 +100,7 @@ stopifnot(all(
     max(rows$stop) == rows$stop[rows$event == 1]
   })))
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 library(dynamichazard)
 dd_rossi <- ddhazard(
   Surv(start, stop, event) ~ fin + age + prio + employed.cumsum, 
@@ -108,17 +108,17 @@ dd_rossi <- ddhazard(
   Q_0 = diag(10000, 5), Q = diag(.01, 5),
   control = ddhazard_control(eps = .001, n_max = 250))
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 plot(dd_rossi)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 hats <- hatvalues(dd_rossi)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 str(hats[1:3]) # str of first three elements 
 head(hats[[1]], 10) # Print the head of first matrix
 
-## ----stack_hats, echo = FALSE--------------------------------------------
+## ----stack_hats, echo = FALSE-------------------------------------------------
 stack_hats <- function(hats){
   # Stack
   resids_hats <- data.frame(do.call(rbind, hats), row.names = NULL)
@@ -136,22 +136,22 @@ stack_hats <- function(hats){
   resids_hats
 }
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 hats_stacked <- stack_hats(hats)
 
 head(hats_stacked)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # Draw histogram of hat values
 hist(log10(hats_stacked$hat_value), main = "",
      xlab = "Histogram of log10 of Hat values")
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # Print the largest values 
 max_hat <- tapply(hats_stacked$hat_value, hats_stacked$id, max)
 head(sort(max_hat, decreasing = T), 5)
 
-## ----rossi_hat_plot------------------------------------------------------
+## ----rossi_hat_plot-----------------------------------------------------------
 # We will highlight the individuals with the highest hatvalues
 is_large <- 
   names(head(sort(max_hat, decreasing = T), 5))
@@ -173,7 +173,7 @@ invisible(
     }
   }))
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # These are the individuals id
 is_large
 
@@ -183,17 +183,17 @@ Rossi_subset <- Rossi[
 Rossi_subset <- Rossi_subset[nrow(Rossi_subset):1, ]
 Rossi_subset[!duplicated(Rossi_subset$id), ]
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 tmp <- xtabs(~Rossi$prio[!duplicated(Rossi$id)]) 
 plot(as.numeric(names(tmp)), c(tmp), ylab = "frequency", type = "h", 
      xlab = "Number of prior convictions")
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 tmp <- xtabs(~log(Rossi$prio[!duplicated(Rossi$id)] + 1))
 plot(as.numeric(names(tmp)), c(tmp), ylab = "frequency", type = "h", 
      xlab = "Log(Number of prior convictions + 1)")
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 dd_rossi_trans <- ddhazard(
   Surv(start, stop, event) ~ fin + age + log(prio + 1) + employed.cumsum, 
   data = Rossi, id = Rossi$id, by = 1, max_T = 52, 
@@ -202,12 +202,12 @@ dd_rossi_trans <- ddhazard(
 
 plot(dd_rossi_trans)
 
-## ---- echo = FALSE-------------------------------------------------------
+## ---- echo = FALSE------------------------------------------------------------
 hats <- hatvalues(dd_rossi_trans)
 
 hats_stacked <- stack_hats(hats)
 
-## ----rossi_hat_plot, echo = FALSE, fig.path = "figure/replot-"-----------
+## ----rossi_hat_plot, echo = FALSE, fig.path = "figure/replot-"----------------
 # We will highlight the individuals with the highest hatvalues
 is_large <- 
   names(head(sort(max_hat, decreasing = T), 5))
@@ -229,7 +229,7 @@ invisible(
     }
   }))
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # Fit the two models
 f1 <- ddhazard(
   Surv(start, stop, event) ~ fin + age + prio + employed.cumsum, 
@@ -259,13 +259,13 @@ log_error2 <- unlist(
 print(c(res1 = mean(log_error1), res2 = mean(log_error2)),
       digits = 8)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 load("Diagnostics/whas500.RData")
 
 hist(whas500$lenfol[whas500$fstat == 1], breaks = 20, 
      xlab = "Time of death", main = "")
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # We only keep some of the columns
 whas500 <- whas500[
   , c("id", "lenfol", "fstat", "gender",  "age", "bmi", "hr", "cvd")]
@@ -276,7 +276,7 @@ head(whas500, 10)
 # Summary stats
 summary(whas500[, c("age", "bmi", "hr", "gender",  "cvd")])
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 dd_whas <- ddhazard(
   Surv(lenfol, fstat) ~ gender + age + bmi + hr + cvd,
   data = whas500, by = 100, max_T = 2000, 
@@ -285,7 +285,7 @@ dd_whas <- ddhazard(
 
 plot(dd_whas)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 dd_whas <- ddhazard(
   Surv(lenfol, fstat) ~ age + bmi + hr + cvd,
   data = whas500, by = 100, max_T = 2000, 
@@ -294,7 +294,7 @@ dd_whas <- ddhazard(
 
 plot(dd_whas)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 dd_whas_no_age <- ddhazard(
   Surv(lenfol, fstat) ~ bmi + hr + cvd,   # No age
   data = whas500, by = 100, max_T = 1700, 
@@ -303,10 +303,10 @@ dd_whas_no_age <- ddhazard(
 
 plot(dd_whas_no_age)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 obs_res <- residuals(dd_whas_no_age, type = "pearson")
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # We have matrix for each interval
 length(obs_res$residuals)    
 
@@ -316,7 +316,7 @@ str(obs_res$residuals[1:5])
 # Print the first entries of the first interval
 head(obs_res$residuals[[1]]) 
 
-## ----stack_res, echo = FALSE---------------------------------------------
+## ----stack_res, echo = FALSE--------------------------------------------------
 stack_residuals <- function(fit, resids){
   if(!inherits(resids, "ddhazard_residual"))
     stop("Residuals must have class 'ddhazard_residual'")
@@ -343,13 +343,13 @@ stack_residuals <- function(fit, resids){
   resids_stacked
 }
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 resids_stacked <- stack_residuals(fit = dd_whas_no_age, resids = obs_res)
 
 # print the first entries
 head(resids_stacked, 10)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # Add age variable
 resids_stacked$age <- 
   whas500$age[resids_stacked$row_num]
@@ -382,18 +382,18 @@ legend("topleft", bty = "n",
        col = cols, lwd = 2,
        cex = par()$cex * .8)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 stat_res <- residuals(dd_rossi, type = "std_space_error")
 
 str(stat_res)
 
-## ---- echo=FALSE---------------------------------------------------------
+## ---- echo=FALSE--------------------------------------------------------------
 stopifnot(all(abs(stat_res$residuals) < 1.96))
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 plot(stat_res, mod = dd_rossi, p_cex = .75, ylim = c(-2, 2))
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # Get non-standardized residuals
 stat_res <- residuals(dd_rossi, type = "space_error")
 
@@ -409,21 +409,21 @@ for(i in 1:ncol(stat_res$residuals))
        ylab = colnames(stat_res$residuals)[i], 
        ylim = c(-2, 2))
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 stat_res <- residuals(dd_whas, type = "std_space_error")
 
 plot(stat_res, mod = dd_whas, ylim = c(-4, 4), p_cex = .8)
 
-## ---- echo=FALSE---------------------------------------------------------
+## ---- echo=FALSE--------------------------------------------------------------
 if(requireNamespace("dichromat", quietly = T, warn.conflicts = F)){
   cols <- c("#000000", dichromat::colorschemes$Categorical.12[c(6, 8, 10)])
 } else
   cols <- c("#000000", "#009E73", "#e79f00", "#9ad0f3")
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 sim_func <- with(environment(ddhazard), test_sim_func_logit)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # Simulate the coefficients
 set.seed(556189)
 betas <- matrix(rnorm(21 * 4), ncol = 4)
@@ -434,7 +434,7 @@ betas[, 1] <- betas[, 1] - 4     # we reduce the intercept
 # Plot the simulated coefficients
 matplot(betas, col = cols, lty = 1, type = "l")
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # Simulate series
 sim_dat <- sim_func(
   n_series = 500,      # number of individuals
@@ -446,10 +446,10 @@ sim_dat <- sim_func(
                        # between updates of covariate vectors
   betas = betas)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 head(sim_dat$res, 10)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 f1 <- ddhazard(
   Surv(tstart, tstop, event) ~ x1 + x2 + x3,
   sim_dat$res, by = 1, max_T = 20, id = sim_dat$res$id, 
@@ -459,16 +459,16 @@ f1 <- ddhazard(
 matplot(betas, col = cols, lty = 1, type = "l")
 matplot(f1$state_vecs, col = cols, lty = 2, type = "l", add = T)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 stat_res <- residuals(f1, type = "std_space_error")
 
 plot(stat_res, mod = f1, p_cex = .8)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 qqnorm(c(stat_res$residuals), pch = 16, cex = .8)
 qqline(c(stat_res$residuals))
 
-## ---- echo=FALSE, fig.height=8-------------------------------------------
+## ---- echo=FALSE, fig.height=8------------------------------------------------
 # CHECK: arguments below match those above
 par(mfcol = c(3, 3))
 
@@ -513,11 +513,11 @@ for(i in 1:3){
 }
 
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 hats <- hatvalues(dd_whas)
 hats_stacked <- stack_hats(hats)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # Compute cumulated hat values
 hats_stacked$hats_cum <- unlist(tapply(
   hats_stacked$hat_value, hats_stacked$id, cumsum))
@@ -529,7 +529,7 @@ invisible(
   tapply(hats_stacked$hats_cum, hats_stacked$id, lines, 
          col = gray(0, alpha = .2)))
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 max_cum <- tapply(hats_stacked$hats_cum, hats_stacked$id, max)
 is_max <- order(max_cum, decreasing = T)[1:3]
 is_max
@@ -537,7 +537,7 @@ is_max
 # The records for these
 whas500[is_max, ]
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # Averages of hat values
 hats_stacked$hats_avg <- hats_stacked$hats_cum / hats_stacked$interval_n
   
@@ -548,7 +548,7 @@ invisible(
   tapply(hats_stacked$hats_avg, hats_stacked$id, lines, 
          col = gray(0, alpha = .2)))
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 max_avg <- tapply(hats_stacked$hats_avg, hats_stacked$id, max)
 is_max_avg <- order(max_avg, decreasing = T)[1:5]
 is_max_avg
@@ -556,7 +556,7 @@ is_max_avg
 # The records for these
 whas500[is_max_avg, ]
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # Setup parameters for the plot
 cols <- rep("Black", 500)
 cols[1:500 %in% is_max_avg] <- "Blue"
@@ -567,13 +567,13 @@ pchs <- ifelse(whas500$fstat == 1 & whas500$lenfol <= 2000, 16, 1)
 
 plot(whas500[, c("age", "hr", "bmi")], pch = pchs, cex = cexs, col = cols)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 plot(whas500$lenfol, whas500$hr, col = cols, pch = pchs, 
      xlab = "Follow-up time", ylab = "Heart rate")
 plot(whas500$lenfol, whas500$age, col = cols, pch = pchs, 
      xlab = "Follow-up time", ylab = "Age")
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 dd_whas <- ddhazard(
   Surv(lenfol, fstat) ~ age + bmi + hr + cvd,
   data = whas500, by = 100, max_T = 1700, 
@@ -588,14 +588,14 @@ dd_whas_no_extreme <- ddhazard(
   by = 100, max_T = 1700, 
   Q_0 = diag(10000, 5), Q = diag(.1, 5))
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 par(mfcol = c(2,3))
 for(i in 1:5){
   plot(dd_whas, cov_index = i)
   plot(dd_whas_no_extreme, cov_index = i, add = T, col = "DarkBlue")
 }
 
-## ----stack_hats, eval = FALSE--------------------------------------------
+## ----stack_hats, eval = FALSE-------------------------------------------------
 #  stack_hats <- function(hats){
 #    # Stack
 #    resids_hats <- data.frame(do.call(rbind, hats), row.names = NULL)
@@ -613,7 +613,7 @@ for(i in 1:5){
 #    resids_hats
 #  }
 
-## ----stack_res, eval = FALSE---------------------------------------------
+## ----stack_res, eval = FALSE--------------------------------------------------
 #  stack_residuals <- function(fit, resids){
 #    if(!inherits(resids, "ddhazard_residual"))
 #      stop("Residuals must have class 'ddhazard_residual'")

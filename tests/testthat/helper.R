@@ -1,5 +1,9 @@
 suppressWarnings(RNGversion("3.5.0"))
 
+# handle change of the default in all.equal
+expect_equal <- function(...)
+  testthat::expect_equal(..., check.environment = FALSE)
+
 # Run before test
 # See https://github.com/hadley/testthat/issues/544#issuecomment-260053774
 
