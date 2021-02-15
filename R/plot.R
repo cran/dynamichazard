@@ -15,6 +15,9 @@
 #' @details
 #' Creates a plot of state variables or adds state variables to a plot with indices \code{cov_index}. Pointwise 1.96 std. confidence intervals are provided with the smoothed co-variance matrices from the fit.
 #'
+#' @return
+#' Returns \code{NULL} using \code{\link{invisible}}.
+#'
 #' @importFrom graphics matplot matpoints
 #'
 #' @examples
@@ -32,7 +35,7 @@
 plot.ddhazard = function(x, xlab = "Time",
                              ylab = "Hazard",
                              type = "cov", plot_type = "l", cov_index, ylim,
-                             col = "black", add = F, do_alter_mfcol = T,
+                             col = "black", add = FALSE, do_alter_mfcol = TRUE,
                              level = 0.95,
                              ddhazard_boot, ...){
   if(!x$model %in% c("logit", "cloglog", exp_model_names))
@@ -55,8 +58,8 @@ plot.ddhazard = function(x, xlab = "Time",
 
     n_plots <- length(cov_index)
     if(!add && do_alter_mfcol && n_plots > 1){
-      org_mfcol <- par()$mfcol
-      on.exit(par(mfcol = org_mfcol))
+      par_old <- par(no.readonly = TRUE)
+      on.exit(par(par_old))
       par(mfcol =
             if(n_plots <= 2) c(2,1) else
               if(n_plots <= 4) c(2,2) else
@@ -117,7 +120,7 @@ plot.ddhazard = function(x, xlab = "Time",
         if(nrow(boot_ests) > max_print){
           if(i == cov_index[1])
             message("Only plotting ", max_print, " of the boot sample estimates")
-          boot_ests <- boot_ests[sample.int(nrow(boot_ests), size = max_print, replace = F), ]
+          boot_ests <- boot_ests[sample.int(nrow(boot_ests), size = max_print, replace = FALSE), ]
         }
 
         new_col <- c(col2rgb(col = col))
@@ -146,6 +149,9 @@ plot.ddhazard = function(x, xlab = "Time",
 #' @param x_tick_loc,x_tick_mark \code{at} and \code{labels} arguments passed to \code{axis}.
 #' @param ... arguments passed to \code{\link{plot.default}}.
 #'
+#' @return
+#' Returns \code{NULL} using \code{\link{invisible}}.
+#'
 #' @importFrom graphics abline axis par plot points
 #' @export
 plot.ddhazard_space_errors = function(x, mod, cov_index = NA, t_index = NA,
@@ -156,7 +162,7 @@ plot.ddhazard_space_errors = function(x, mod, cov_index = NA, t_index = NA,
   bin_times = mod$times[-1]
 
   var_index = if(length(t_index) == 1 && is.na(cov_index)) seq_len(ncol(mod$state_vecs)) else cov_index
-  res_std = x$residuals[, var_index, drop = F]
+  res_std = x$residuals[, var_index, drop = FALSE]
   n_vars = length(var_index)
 
   # assume equal distance

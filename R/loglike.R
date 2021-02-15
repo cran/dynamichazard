@@ -11,6 +11,9 @@
 #' @param id the individual identifiers as in \code{\link{ddhazard}}.
 #' @param ... unused.
 #'
+#' @return
+#' Returns an ojbect of class \code{logLik}. See \code{\link{logLik}}.
+#'
 #' @examples
 #'library(dynamichazard)
 #'fit <- ddhazard(
@@ -41,10 +44,10 @@ logLik.ddhazard = function(object, data = NULL, id, ...){
       stop("id need to compute log likelihood. Please, pass the id used in 'ddhazard' call")
 
     if(object$model %in% exp_model_names){
-      is_for_discrete_model <- F
+      is_for_discrete_model <- FALSE
 
     } else if (object$model == "logit"){
-      is_for_discrete_model <- T
+      is_for_discrete_model <- TRUE
 
     } else
       stop("logLik not implemented for model '", object$model, "'")
@@ -55,7 +58,7 @@ logLik.ddhazard = function(object, data = NULL, id, ...){
   }
 
   val <- logLike_cpp(
-    X = X$X, risk_obj = risk_obj, F = object$F_,
+    X = X$X, risk_obj = risk_obj, Fmat = object$F_,
     Q_0 = object$Q_0, Q = object$Q, a_t_d_s = t(object$state_vecs),
     tstart = X$Y[, 1], tstop = X$Y[, 2], order_ = object$order,
     model = object$model, fixed_effects_offsets = fixed_effects_offsets)

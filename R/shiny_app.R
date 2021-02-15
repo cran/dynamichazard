@@ -9,13 +9,16 @@
 #' @details
 #' Runs a shiny app where you try different model specifications on simulated data.
 #'
+#' @return
+#' Returns the object from \code{shiny::shinyApp}.
+#'
 #' @examples
 #'\dontrun{
 #' dynamichazard::ddhazard_app()
 #' dynamichazard::ddhazard_app(seed = 1, more_options = TRUE)
 #'}
 #' @export
-ddhazard_app = function(quietly = F, ...) {
+ddhazard_app = function(quietly = FALSE, ...) {
   for(pkg in c("shiny", "formatR")){
     if (!requireNamespace(pkg, quietly = TRUE)) {
       stop(pkg, " needed for this function to work. Please install it.",

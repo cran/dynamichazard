@@ -9,6 +9,9 @@
 #' @description
 #' Arguments have the same effects as for an object from a \code{\link{boot}} call. See \code{\link[=print.boot]{print}}.
 #'
+#' @return
+#' Returns \code{x} using \code{\link{invisible}}.
+#'
 #' @seealso
 #' \code{\link{ddhazard_boot}}
 #'
@@ -28,7 +31,7 @@ print.ddhazard_boot <-
     if (length(index) == 0L)
       op <- NULL
     else {
-      t0 <- boot.out$t0[index, drop = F]
+      t0 <- boot.out$t0[index, drop = FALSE]
       op <- cbind(
         t0,
         apply(t, 2L, mean, na.rm = TRUE) - t0,
@@ -43,7 +46,6 @@ print.ddhazard_boot <-
       print(op, digits = digits)
     invisible(boot.out)
   }
-
 
 #' @export
 print.ddhazard<- function(x, ...){

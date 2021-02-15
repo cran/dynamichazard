@@ -11,7 +11,7 @@
   tstart = "start",
   tstop = "stop",
   use_parallel,
-  sds = F,
+  sds = FALSE,
   max_threads,
   ...
 )
@@ -34,6 +34,9 @@
 \item{max_threads}{not longer supported.}
 
 \item{...}{not used.}
+}
+\value{
+Returns a list with elements as described in the Term and Response sections.
 }
 \description{
 Predict method for \code{\link{ddhazard}}.

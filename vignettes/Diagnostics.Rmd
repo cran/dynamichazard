@@ -43,19 +43,18 @@ knitr::knit_hooks$set(output = function(x, options) {
    hook_output(x, options)
  })
 
-knitr::opts_chunk$set(echo = TRUE, warning = F, message = F, 
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, 
                       dpi = 100, cache = FALSE, dev = "png")
-knitr::opts_knit$set(warning = F, message = F)
-options(digits = 3)
+knitr::opts_knit$set(warning = FALSE, message = FALSE)
 
 knit_print.data.frame <- function(
-  x, ..., row.names = F, digits = getOption("digits")){
+  x, ..., row.names = FALSE, digits = getOption("digits")){
   res <- paste(c(
     "", "", knitr::kable(x, ..., row.names = row.names, digits = digits)), 
     collapse = "\n")
   knitr::asis_output(res)
 }
-knit_print.matrix <- function(x, ..., digits = getOption("digits"), row.names = F, escape = T){
+knit_print.matrix <- function(x, ..., digits = getOption("digits"), row.names = FALSE, escape = TRUE){
   col.names <- rep("", ncol(x))
   col.names <- if(is.null(colnames(x)))
     rep("", ncol(x)) else colnames(x)
@@ -104,6 +103,18 @@ knit_print.matrix <- function(x, ..., digits = getOption("digits"), row.names = 
 # Introduction
 
 This vignette will show examples of how the `residuals` and `hatvalues` functions can be used for an object returned by `ddhazard`. See `vignette("ddhazard", "dynamichazard")` for details of the computations. Firstly, we will present all the tools that turned out to be useful for data sets. This is in the section called "First round of checks". Then we return to the data sets using the other methods. The latter part is included to illustrate how the function in this package work. This is in the section called "Second round of checks".
+
+## Has to be done
+
+CRAN requires that the `par` options and `options`
+are reset somewhere. Thus, we get the old settings and reset them at the end.
+
+```{r get_par_old}
+old_par <- par(no.readonly = TRUE)
+
+# set digits
+old_options <- options(digits = 3)
+```
 
 # First round of checks
 ## Data set 1: Prisoner recidivism
@@ -260,7 +271,7 @@ We find the maximum hat value for each individual and print the largest of them:
 ```{r}
 # Print the largest values 
 max_hat <- tapply(hats_stacked$hat_value, hats_stacked$id, max)
-head(sort(max_hat, decreasing = T), 5)
+head(sort(max_hat, decreasing = TRUE), 5)
 ```
 
 The names of the returned vector is the id of the individual. One seems to stand out. Next, we plot the hat values against time and highlight the individuals with the largest maximum hat value by giving them a red color and adding a number for the rank of their maximum hat value:
@@ -268,7 +279,7 @@ The names of the returned vector is the id of the individual. One seems to stand
 ```{r rossi_hat_plot}
 # We will highlight the individuals with the highest hatvalues
 is_large <- 
-  names(head(sort(max_hat, decreasing = T), 5))
+  names(head(sort(max_hat, decreasing = TRUE), 5))
 
 # Plot hat values
 plot(range(hats_stacked$interval_n), c(0, 0.03), type = "n",
@@ -589,7 +600,7 @@ Again, the errors seems to have to low variance to be standard normal apart from
 #### Simmulation
 
 ```{r, echo=FALSE}
-if(requireNamespace("dichromat", quietly = T, warn.conflicts = F)){
+if(requireNamespace("dichromat", quietly = TRUE, warn.conflicts = FALSE)){
   cols <- c("#000000", dichromat::colorschemes$Categorical.12[c(6, 8, 10)])
 } else
   cols <- c("#000000", "#009E73", "#e79f00", "#9ad0f3")
@@ -654,7 +665,7 @@ f1 <- ddhazard(
   control = ddhazard_control(eps = .001))
 
 matplot(betas, col = cols, lty = 1, type = "l")
-matplot(f1$state_vecs, col = cols, lty = 2, type = "l", add = T)
+matplot(f1$state_vecs, col = cols, lty = 2, type = "l", add = TRUE)
 ```
 
 The full lines are the true coefficients and the dashed lines are the estimates. The question is then how the standardized state space errors look. We plot these below
@@ -707,7 +718,7 @@ for(i in 1:3){
   # Plot coefficients
   matplot(betas, col = cols, lty = 1, type = "l",
           ylim = range(betas, f1$state_vecs))
-  matplot(f1$state_vecs, col = cols, lty = 2, type = "l", add = T)
+  matplot(f1$state_vecs, col = cols, lty = 2, type = "l", add = TRUE)
   
   # Plot errors
   stat_res <- residuals(f1, type = "std_space_error")
@@ -751,7 +762,7 @@ Three individuals seems to stand out. We look at these in the next line:
 
 ```{r}
 max_cum <- tapply(hats_stacked$hats_cum, hats_stacked$id, max)
-is_max <- order(max_cum, decreasing = T)[1:3]
+is_max <- order(max_cum, decreasing = TRUE)[1:3]
 is_max
 
 # The records for these
@@ -776,7 +787,7 @@ Indeed the two stands. Hence, we look further at the five largest values:
 
 ```{r}
 max_avg <- tapply(hats_stacked$hats_avg, hats_stacked$id, max)
-is_max_avg <- order(max_avg, decreasing = T)[1:5]
+is_max_avg <- order(max_avg, decreasing = TRUE)[1:5]
 is_max_avg
 
 # The records for these
@@ -830,7 +841,7 @@ We plot the two sets of predicted coefficients next:
 par(mfcol = c(2,3))
 for(i in 1:5){
   plot(dd_whas, cov_index = i)
-  plot(dd_whas_no_extreme, cov_index = i, add = T, col = "DarkBlue")
+  plot(dd_whas_no_extreme, cov_index = i, add = TRUE, col = "DarkBlue")
 }
 ```
 
@@ -843,6 +854,14 @@ The functions used in this vignette that are no included in the package are defi
 ```
 
 ```{r stack_res, eval = FALSE}
+```
+
+## Has to be done
+We reset `par` and `options` here as per CRAN policy.
+
+```{r reset_par}
+par(old_par)
+options(old_options)
 ```
 
 

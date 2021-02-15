@@ -9,10 +9,10 @@ ddhazard_boot(
   strata,
   unique_id,
   R = 100,
-  do_stratify_with_event = F,
-  do_sample_weights = F,
+  do_stratify_with_event = FALSE,
+  do_sample_weights = FALSE,
   LRs = ddhazard_fit$control$LR * 2^(0:(-4)),
-  print_errors = F
+  print_errors = FALSE
 )
 }
 \arguments{
@@ -39,7 +39,7 @@ An object like from the \code{\link[boot]{boot}} function.
 See the vignette \code{vignette("Bootstrap_illustration", "dynamichazard")}. The \code{do_stratify_with_event} may be useful when either cases or non-cases are very rare to ensure that the model estimation succeeds.
 }
 \examples{
-\dontrun{
+\donttest{
 library(dynamichazard)
 set.seed(56219373)
 fit <- ddhazard(

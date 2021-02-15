@@ -13,8 +13,8 @@
   cov_index,
   ylim,
   col = "black",
-  add = F,
-  do_alter_mfcol = T,
+  add = FALSE,
+  do_alter_mfcol = TRUE,
   level = 0.95,
   ddhazard_boot,
   ...
@@ -40,6 +40,9 @@
 \item{ddhazard_boot}{object from a \code{\link{ddhazard_boot}} call which confidence bounds will be based on and where bootstrap samples will be printed with a transparent color.}
 
 \item{...}{arguments passed to \code{\link{plot.default}} or \code{lines} depending on the value of \code{add}.}
+}
+\value{
+Returns \code{NULL} using \code{\link{invisible}}.
 }
 \description{
 Plot of estimated state space variables from a \code{\link{ddhazard}} fit.

@@ -1,7 +1,6 @@
 ## ----setup, include=FALSE-----------------------------------------------------
 knitr::knit_hooks$set(default_opts = function(before, options, envir) {
     if (before){
-      options(digist = 4)
       par(
         mar = c(5, 4, 1, 1),
         bty = "n",
@@ -14,17 +13,18 @@ knitr::knit_hooks$set(default_opts = function(before, options, envir) {
     }
 })
 
-options(digist = 4)
 knitr::opts_chunk$set(
-  echo = TRUE, warning = F, message = F, dpi = 126, fig.height=3.5, fig.width = 6)
-knitr::opts_knit$set(warning = F, message = F,  default_opts = T)
+  echo = TRUE, warning = FALSE, message = FALSE, dpi = 126, fig.height=3.5, fig.width = 6)
+knitr::opts_knit$set(warning = FALSE, message = FALSE,  default_opts = TRUE)
 
 ## ----echo=FALSE---------------------------------------------------------------
-tryCatch({
+try_val <- try({
   current_sha <- system("git rev-parse --short HEAD", intern = TRUE)
   if(grepl("^fatal: Not a git repository", current_sha))
     current_sha <- ""
-}, error = function(...){ current_sha <<- "" })
+}, silent = TRUE)
+if(inherits(try_val, "try-error"))
+  current_sha <- ""
 
 current_version <- paste0(
   "boennecd/dynamichazard", if(nchar(current_sha) > 0) "@" else "",
@@ -32,6 +32,12 @@ current_version <- paste0(
 
 ## ----eval=FALSE---------------------------------------------------------------
 #  install.packages("dynamichazard")
+
+## ----get_par_old--------------------------------------------------------------
+old_par <- par(no.readonly = TRUE)
+
+# set digits
+old_options <- options(digist = 4)
 
 ## ----echo=FALSE---------------------------------------------------------------
 library(survival)
@@ -60,7 +66,7 @@ stopifnot(any(simple_ex$event[simple_ex$id == 1] == 1) &&
 ## ----echo = FALSE, results='asis'---------------------------------------------
 knitr::kable(
   head(simple_ex, 10), digits = 4, format = "latex",
-  booktabs = T, row.names = FALSE, align = rep("r", 6))
+  booktabs = TRUE, row.names = FALSE, align = rep("r", 6))
 
 ## -----------------------------------------------------------------------------
 library(dynamichazard)
@@ -100,7 +106,7 @@ par(mfcol = c(1, 2), mar = c(5, 4, 1, 1), cex = .75)
 
 for(i in 1:2){
   plot(dd_fit_short, cov_index = i, col = "Black")
-  plot(dd_fit_wide, cov_index = i, col = "DarkBlue", add = T)
+  plot(dd_fit_wide, cov_index = i, col = "DarkBlue", add = TRUE)
 }
 
 ## ----eval=FALSE---------------------------------------------------------------
@@ -108,7 +114,7 @@ for(i in 1:2){
 
 ## ----binning_fig, echo=FALSE, results="hide", fig.cap = "Illustration of going from event times to binary variables. Each horizontal line represents an individual. A cross indicates that new covariates are observed while a filled circle indicates that the individual have died. Open circles indicates that the individual is right-censored. Vertical dashed lines are time interval borders.", fig.height=3, fig.align="center"----
 par(cex = .8, mar = c(1, 4, 1, 2))
-plot(c(0, 4), c(0, 1), type="n", xlab="", ylab="", axes = F)
+plot(c(0, 4), c(0, 1), type="n", xlab="", ylab="", axes = FALSE)
 
 abline(v = c(0.5, 1.5, 2.5), lty = 2)
 
@@ -137,7 +143,7 @@ x_vals_and_point_codes = list(
         c(4, 1)))
 
 x_vals_and_point_codes = x_vals_and_point_codes[
-  c(n_series, sample(n_series - 1, n_series - 1, replace = F))]
+  c(n_series, sample(n_series - 1, n_series - 1, replace = FALSE))]
 
 for(i in seq_along(x_vals_and_point_codes)){
   vals = x_vals_and_point_codes[[i]]
@@ -160,4 +166,8 @@ for(i in seq_along(x_vals_and_point_codes)){
 
 # add letters
 text(rep(0, n_series), rev(y_pos), letters[1:n_series], cex = par()$cex * 1.5)
+
+## ----reset_par----------------------------------------------------------------
+par(old_par)
+options(old_options)
 

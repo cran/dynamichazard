@@ -236,7 +236,7 @@ get_data_func <- with(new.env(), {
   cursor <- 0
   chunksize <- chunksize
 
-  function(reset = F){
+  function(reset = FALSE){
     if(reset){
       cursor <<- 0
       return(invisible())
@@ -251,10 +251,10 @@ get_data_func <- with(new.env(), {
   }})
 
 test_that("I did not mess up with get_data_func", {
-  get_data_func(T)
+  get_data_func(TRUE)
   expect_equal(sims$res[1:chunksize, ], get_data_func())
   expect_equal(sims$res[1:chunksize + chunksize, ], get_data_func())
-  get_data_func(T)
+  get_data_func(TRUE)
   expect_equal(sims$res[1:chunksize, ], get_data_func())
   expect_equal(sims$res[1:chunksize + chunksize, ], get_data_func())
 })
@@ -286,7 +286,7 @@ test_that("bigglm and my c++ version yields similar results with offsets", {
   skip_if_not_installed("biglm")
 
   set.seed(195834)
-  sims$res <<- cbind(sims$res, offs = rexp(nrow(sims$res), rate = 1))
+  sims$res <- cbind(sims$res, offs = rexp(nrow(sims$res), rate = 1))
   form <- formula(event ~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10 + offset(offs))
 
   for(model in c("logit", "exponential")){
@@ -315,7 +315,7 @@ test_that("bigglm and my c++ version yields similar with weights", {
   ws <- ws * (nrow(sims$res) / sum(ws))
   sims$res <- cbind(sims$res, ws = ws)
 
-  sims$res <<- cbind(sims$res, offs = rexp(nrow(sims$res), rate = 1))
+  sims$res <- cbind(sims$res, offs = rexp(nrow(sims$res), rate = 1))
   form = formula(event ~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10 + offset(offs))
 
   for(model in c("logit", "exponential")){

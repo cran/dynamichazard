@@ -18,33 +18,24 @@ knitr::knit_hooks$set(
         cex = .75)
     }})
 
-options(digits = 3, width = 80, warn = -1)
-
 knitr::opts_chunk$set(
   echo = TRUE, mySettings=TRUE, fig.height=3.5, fig.width = 6,
-  warning = F, message = F, plot_2x1 = FALSE)
+  warning = FALSE, message = FALSE, plot_2x1 = FALSE)
 
-knitr::opts_knit$set(warning = F, message = F)
-
-## ----echo=FALSE---------------------------------------------------------------
-tryCatch({
-  current_sha <- paste0("@", httr::content(
-    httr::GET("https://api.github.com/repos/boennecd/dynamichazard/git/refs/heads/master")
-    )$object$sha)
-}, error = function(...){ current_sha <<- "" })
-
-stopifnot(length(current_sha) > 0 && class(current_sha) == "character")
-
-current_version <- paste0("boennecd/dynamichazard@", current_sha)
-
-## -----------------------------------------------------------------------------
-current_version # The string you need to pass devtools::install_github
+knitr::opts_knit$set(warning = FALSE, message = FALSE)
 
 ## ----eval=FALSE---------------------------------------------------------------
-#  devtools::install_github(current_version)
+#  # install.packages("remotes")
+#  remotes::install_github("boennecd/dynamichazard")
 
 ## ----eval=FALSE---------------------------------------------------------------
 #  install.packages("dynamichazard")
+
+## ----get_par_old--------------------------------------------------------------
+old_par <- par(no.readonly = TRUE)
+
+# set options
+old_options <- options(digits = 3, width = 80)
 
 ## -----------------------------------------------------------------------------
 # PBC data set from survival with time variying covariates
@@ -76,7 +67,7 @@ library(dynamichazard)
 pbc2_big_frame <- get_survival_case_weights_and_data(
   Surv(tstart, tstop, death == 2) ~ age + edema + log(albumin) + log(protime) +
     log(bili), data = pbc2, id = pbc2$id, by = 100, max_T = 3600, 
-  use_weights = F)
+  use_weights = FALSE)
 pbc2_big_frame <- pbc2_big_frame$X
 
 ## -----------------------------------------------------------------------------
@@ -86,7 +77,7 @@ pbc2_big_frame[pbc2_big_frame$id == 282, ]
 pbc2_small_frame <- get_survival_case_weights_and_data(
   Surv(tstart, tstop, death == 2) ~ age + edema + log(albumin) + log(protime) +
     log(bili), data = pbc2, id = pbc2$id, by = 100, max_T = 3600, 
-  use_weights = T)
+  use_weights = TRUE)
 pbc2_small_frame <- pbc2_small_frame$X
 
 ## -----------------------------------------------------------------------------
@@ -114,7 +105,7 @@ knitr::kable(
           summary(glm_fit_big)[["coefficients"]][, "Std. Error"],
         "Sds without bins" = 
           summary(glm_simple)[["coefficients"]][, "Std. Error"]),
-  row.names = T)
+  row.names = TRUE)
 
 ## -----------------------------------------------------------------------------
 static_glm_fit <- static_glm(
@@ -124,7 +115,7 @@ static_glm_fit <- static_glm(
 all.equal(static_glm_fit$coefficients, glm_fit_big$coefficients)
 
 ## ----message=FALSE------------------------------------------------------------
-library(mgcv, quietly = T)
+library(mgcv, quietly = TRUE)
 spline_fit <- gam(
   formula = Y ~ 
     # cr is cubic spline with k knots
@@ -136,7 +127,7 @@ spline_fit <- gam(
   family = binomial, data = pbc2_big_frame)
 
 ## ---- fig.height = 4.5, mySettings=FALSE, fig.cap="Plots of estimated effects in the GAM model. The effective degree of freedom is noted in the parentheses on the y-axis and is computed given the number knots and final tuning parameter for spline function. For instance, `s(t,2.43):age` means that the effective degrees of freedom for `age` is `2.43`."----
-plot(spline_fit, scale = 0, page = 1, rug = F)
+plot(spline_fit, scale = 0, page = 1, rug = FALSE)
 
 ## -----------------------------------------------------------------------------
 glm_fit_big$coefficients
@@ -208,7 +199,7 @@ plot(dd_fit_UKF)
 #     Q_0 = diag(rep(1, 6)), Q = diag(rep(0.01, 6)),
 #     control =
 #       ddhazard_control(method = "UKF", beta = 0, alpha = 1,
-#                        debug = T)) # <-- prints information in each iteration
+#                        debug = TRUE)) # <-- prints information in each iteration
 #  sink()
 #  close(tmp_file)
 
@@ -257,7 +248,7 @@ dd_fit_SMA <-
 #  }
 
 ## ---- echo=FALSE--------------------------------------------------------------
-par_old <- par(no.readonly = T)
+par_old <- par(no.readonly = TRUE)
 par(mfcol = c(2, 3))
 par(cex = par_old$cex * .85, mar = par_old$mar * 1.33)
 for(i in 1:6){
@@ -304,4 +295,8 @@ dd_fit_EKF$fixed_effects
 
 ## -----------------------------------------------------------------------------
 plot(dd_fit_EKF)
+
+## ----reset_par----------------------------------------------------------------
+par(old_par)
+options(old_options)
 

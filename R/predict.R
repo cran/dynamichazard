@@ -46,6 +46,9 @@
 #' \item{\code{istop}}{numeric vector with stop time for each element in \code{fits}.}
 #'}
 #'
+#' @return
+#' Returns a list with elements as described in the Term and Response sections.
+#'
 #' @examples
 #' fit <- ddhazard(
 #'  Surv(time, status == 2) ~ log(bili), pbc, id = pbc$id, max_T = 3600,
@@ -66,7 +69,7 @@
 predict.ddhazard = function(object, new_data,
                                 type = c("response", "term"),
                                 tstart = "start", tstop = "stop",
-                                use_parallel, sds = F, max_threads, ...)
+                                use_parallel, sds = FALSE, max_threads, ...)
 {
   if(!object$model %in% c("logit", "cloglog", exp_model_names))
     stop("Functions for model '", object$model, "' is not implemented")
@@ -79,7 +82,7 @@ predict.ddhazard = function(object, new_data,
   #       in version 0.5.0 to get the index of potential fixed effects
   tmp = get_design_matrix(
     formula = object$formula,
-    data = new_data, response = F, Terms = object$terms, xlev = object$xlev,
+    data = new_data, response = FALSE, Terms = object$terms, xlev = object$xlev,
     has_fixed_intercept = object$has_fixed_intercept)
   object$formula <- tmp$formula_used
 
@@ -375,7 +378,7 @@ predict_response <- function(
 #'
 #' # predict with default which is all covariates set to zero
 #' ddcurve <- ddsurvcurve(f1)
-#' par(mar = c(4.5, 4, .5, .5))
+#' par_old <- par(mar = c(4.5, 4, .5, .5))
 #' plot(ddcurve, col = "DarkBlue", lwd = 2)
 #'
 #' # compare with cox model
@@ -448,6 +451,7 @@ predict_response <- function(
 #'       col = "DarkBlue")
 #' lines(survfit(Surv(stop, event) ~ 1, head_neck_cancer, subset = group == 2),
 #'       col = "DarkOrange")
+#' par(par_old) # As per CRAN policy, the settings are reset
 #'
 #' @export
 #' @importFrom utils head
@@ -469,7 +473,7 @@ ddsurvcurve <- function(object, new_data, tstart = "", tstop = ""){
     #       in version 0.5.0 to get the index of potential fixed effects
     tmp = get_design_matrix(
       formula = object$formula,
-      data = new_data, response = F, Terms = object$terms, xlev = object$xlev,
+      data = new_data, response = FALSE, Terms = object$terms, xlev = object$xlev,
       has_fixed_intercept = object$has_fixed_intercept)
     object$formula <- tmp$formula_used
     trs <- predict_response(

@@ -4,12 +4,15 @@
 \alias{ddhazard_app}
 \title{ddhazard Demo}
 \usage{
-ddhazard_app(quietly = F, ...)
+ddhazard_app(quietly = FALSE, ...)
 }
 \arguments{
 \item{quietly}{\code{TRUE} if no messages should be printed when the app is run.}
 
 \item{...}{starting values for the shiny app.}
+}
+\value{
+Returns the object from \code{shiny::shinyApp}.
 }
 \description{
 \code{ddhazard_app} runs a shiny app with demonstration of models.

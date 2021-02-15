@@ -26,19 +26,18 @@ knitr::knit_hooks$set(output = function(x, options) {
    hook_output(x, options)
  })
 
-knitr::opts_chunk$set(echo = TRUE, warning = F, message = F, 
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, 
                       dpi = 100, cache = FALSE, dev = "png")
-knitr::opts_knit$set(warning = F, message = F)
-options(digits = 3)
+knitr::opts_knit$set(warning = FALSE, message = FALSE)
 
 knit_print.data.frame <- function(
-  x, ..., row.names = F, digits = getOption("digits")){
+  x, ..., row.names = FALSE, digits = getOption("digits")){
   res <- paste(c(
     "", "", knitr::kable(x, ..., row.names = row.names, digits = digits)), 
     collapse = "\n")
   knitr::asis_output(res)
 }
-knit_print.matrix <- function(x, ..., digits = getOption("digits"), row.names = F, escape = T){
+knit_print.matrix <- function(x, ..., digits = getOption("digits"), row.names = FALSE, escape = TRUE){
   col.names <- rep("", ncol(x))
   col.names <- if(is.null(colnames(x)))
     rep("", ncol(x)) else colnames(x)
@@ -52,6 +51,12 @@ knit_print.matrix <- function(x, ..., digits = getOption("digits"), row.names = 
     collapse = "\n")
   knitr::asis_output(res)
 }
+
+## ----get_par_old--------------------------------------------------------------
+old_par <- par(no.readonly = TRUE)
+
+# set digits
+old_options <- options(digits = 3)
 
 ## -----------------------------------------------------------------------------
 load("Diagnostics/Rossi.RData")
@@ -149,12 +154,12 @@ hist(log10(hats_stacked$hat_value), main = "",
 ## -----------------------------------------------------------------------------
 # Print the largest values 
 max_hat <- tapply(hats_stacked$hat_value, hats_stacked$id, max)
-head(sort(max_hat, decreasing = T), 5)
+head(sort(max_hat, decreasing = TRUE), 5)
 
 ## ----rossi_hat_plot-----------------------------------------------------------
 # We will highlight the individuals with the highest hatvalues
 is_large <- 
-  names(head(sort(max_hat, decreasing = T), 5))
+  names(head(sort(max_hat, decreasing = TRUE), 5))
 
 # Plot hat values
 plot(range(hats_stacked$interval_n), c(0, 0.03), type = "n",
@@ -210,7 +215,7 @@ hats_stacked <- stack_hats(hats)
 ## ----rossi_hat_plot, echo = FALSE, fig.path = "figure/replot-"----------------
 # We will highlight the individuals with the highest hatvalues
 is_large <- 
-  names(head(sort(max_hat, decreasing = T), 5))
+  names(head(sort(max_hat, decreasing = TRUE), 5))
 
 # Plot hat values
 plot(range(hats_stacked$interval_n), c(0, 0.03), type = "n",
@@ -415,7 +420,7 @@ stat_res <- residuals(dd_whas, type = "std_space_error")
 plot(stat_res, mod = dd_whas, ylim = c(-4, 4), p_cex = .8)
 
 ## ---- echo=FALSE--------------------------------------------------------------
-if(requireNamespace("dichromat", quietly = T, warn.conflicts = F)){
+if(requireNamespace("dichromat", quietly = TRUE, warn.conflicts = FALSE)){
   cols <- c("#000000", dichromat::colorschemes$Categorical.12[c(6, 8, 10)])
 } else
   cols <- c("#000000", "#009E73", "#e79f00", "#9ad0f3")
@@ -457,7 +462,7 @@ f1 <- ddhazard(
   control = ddhazard_control(eps = .001))
 
 matplot(betas, col = cols, lty = 1, type = "l")
-matplot(f1$state_vecs, col = cols, lty = 2, type = "l", add = T)
+matplot(f1$state_vecs, col = cols, lty = 2, type = "l", add = TRUE)
 
 ## -----------------------------------------------------------------------------
 stat_res <- residuals(f1, type = "std_space_error")
@@ -501,7 +506,7 @@ for(i in 1:3){
   # Plot coefficients
   matplot(betas, col = cols, lty = 1, type = "l",
           ylim = range(betas, f1$state_vecs))
-  matplot(f1$state_vecs, col = cols, lty = 2, type = "l", add = T)
+  matplot(f1$state_vecs, col = cols, lty = 2, type = "l", add = TRUE)
   
   # Plot errors
   stat_res <- residuals(f1, type = "std_space_error")
@@ -531,7 +536,7 @@ invisible(
 
 ## -----------------------------------------------------------------------------
 max_cum <- tapply(hats_stacked$hats_cum, hats_stacked$id, max)
-is_max <- order(max_cum, decreasing = T)[1:3]
+is_max <- order(max_cum, decreasing = TRUE)[1:3]
 is_max
 
 # The records for these
@@ -550,7 +555,7 @@ invisible(
 
 ## -----------------------------------------------------------------------------
 max_avg <- tapply(hats_stacked$hats_avg, hats_stacked$id, max)
-is_max_avg <- order(max_avg, decreasing = T)[1:5]
+is_max_avg <- order(max_avg, decreasing = TRUE)[1:5]
 is_max_avg
 
 # The records for these
@@ -592,7 +597,7 @@ dd_whas_no_extreme <- ddhazard(
 par(mfcol = c(2,3))
 for(i in 1:5){
   plot(dd_whas, cov_index = i)
-  plot(dd_whas_no_extreme, cov_index = i, add = T, col = "DarkBlue")
+  plot(dd_whas_no_extreme, cov_index = i, add = TRUE, col = "DarkBlue")
 }
 
 ## ----stack_hats, eval = FALSE-------------------------------------------------
@@ -639,4 +644,8 @@ for(i in 1:5){
 #  
 #    resids_stacked
 #  }
+
+## ----reset_par----------------------------------------------------------------
+par(old_par)
+options(old_options)
 
